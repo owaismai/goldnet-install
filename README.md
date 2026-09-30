@@ -26,4 +26,12 @@ The number is baked into the public bundle: it is **not secret**.
 - Photos live only on the phone (IndexedDB) for the current form session; they are NOT sent with the WhatsApp
   message. Permanent photo storage needs a backend/storage service (future version).
 - Text fields are kept in localStorage so an accidental refresh does not lose the form.
-- Data Matrix: listed in the decoder formats but zxing-js support is limited; 1D (Code 128/39, EAN, UPC) and QR are the tested path.
+- Barcode engine: Android Chrome uses the phone's own Barcode Detection API (Google ML Kit); every other browser
+  uses zxing-cpp compiled to WebAssembly (`barcode-detector` + `zxing-wasm`), bundled in the app (works offline).
+  Formats: Code 128/39/93, Codabar, EAN, UPC, ITF, QR, Data Matrix, PDF417, Aztec.
+- Focus for small barcodes: continuous autofocus is requested, other rear cameras are tried if the default lens has
+  no autofocus, tap the picture to refocus, zoom 1-5x and torch appear when the phone allows it (iPhone Safari
+  exposes no focus/zoom controls, so they are hidden there), and "Scan from photo" reads the barcode from a photo
+  taken with the phone's camera app.
+- Photos: a wa.me link can carry only text, so after the message opens, the photos are sent through the phone's
+  share sheet (Web Share API with files) into the same WhatsApp chat. Browsers without file sharing get Save links.

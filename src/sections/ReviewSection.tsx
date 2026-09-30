@@ -6,6 +6,7 @@ import type { FormState, StepId } from '../types.ts';
 import { DUPLICATE_WARNING, serialsIdentical, validateAll } from '../utils/validation.ts';
 import { buildMessage, buildWhatsAppUrl } from '../utils/whatsapp.ts';
 import { WHATSAPP_NUMBER } from '../config.ts';
+import PhotoShare from '../components/PhotoShare.tsx';
 
 interface Props {
   form: FormState;
@@ -97,7 +98,14 @@ export default function ReviewSection({ form, onEdit, onNew }: Props) {
             {copied ? '✓ Copied' : 'Copy message'}
           </button>
         </div>
-        <p className="text-sm text-gray-600">Photos are not included in the message. They stay on this phone for this form session only.</p>
+        <div className="space-y-2 rounded-xl border-2 border-green-600 bg-green-50 p-3">
+          <p className="text-base font-bold text-green-900">Step 2: send the photos</p>
+          <p className="text-sm text-gray-800">
+            WhatsApp links can only carry text, so the photos go separately. Tap the button, choose <strong>WhatsApp</strong>, then the
+            <strong> same chat</strong> (+{WHATSAPP_NUMBER}), and press Send.
+          </p>
+          <PhotoShare customer={form.fullName} cpeSerial={form.cpeSerial} routerSerial={form.routerSerial} />
+        </div>
         <button type="button" onClick={() => setPhase('review')} className="min-h-12 w-full text-base underline">
           ← Back to review
         </button>
@@ -163,8 +171,14 @@ export default function ReviewSection({ form, onEdit, onNew }: Props) {
       >
         SUBMIT INSTALLATION
       </button>
+      {missing.length === 0 && (
+        <Card>
+          <SectionHeader>Photos</SectionHeader>
+          <PhotoShare customer={form.fullName} cpeSerial={form.cpeSerial} routerSerial={form.routerSerial} />
+        </Card>
+      )}
       <p className="text-center text-sm text-gray-600">
-        This opens WhatsApp with the details ready to send to +{WHATSAPP_NUMBER}. You then press Send in WhatsApp.
+        This opens WhatsApp with the details ready to send to +{WHATSAPP_NUMBER}. You then press Send in WhatsApp. The next screen lets you send the photos too.
       </p>
     </div>
   );

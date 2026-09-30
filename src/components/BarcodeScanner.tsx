@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import type { IScannerControls } from '@zxing/browser';
-import { createReader } from '../utils/barcode.ts';
+import { createDetector, createWasmDetector, decodeImageFile } from '../utils/barcode.ts';
+import type { Detector } from '../utils/barcode.ts';
 import { normaliseSerial } from '../utils/serial.ts';
 import { describeCameraError } from '../utils/camera.ts';
 import type { CameraProblem } from '../utils/camera.ts';
+import { findFocusableCamera, listBackCameras, openStream, setTorch, setZoom, stopStream, tapFocus, tuneTrack } from '../utils/scannerCamera.ts';
+import type { Cam, TrackInfo } from '../utils/scannerCamera.ts';
 
 interface Props {
   title: string; // e.g. "SCAN CPE BARCODE"
@@ -16,93 +18,119 @@ interface Props {
 const CONFIRM_READS = 2;
 
 /**
- * Full-screen rear-camera scanner. Mounted only after the technician presses a
- * SCAN button, so the permission prompt never appears unprompted. Detects
- * automatically (no capture button), vibrates, then stops the camera and closes.
+ * Full-screen rear-camera scanner. Mounted only after the technician presses a SCAN button, so the
+ * permission prompt never appears unprompted. Detects automatically (no capture button), vibrates,
+ * then stops the camera and closes. Small barcodes: continuous autofocus, tap-to-focus, zoom,
+ * torch, camera switching, and a "scan from photo" fallback that uses the phone's camera app.
  */
 export default function BarcodeScanner({ title, onResult, onCancel, onManual }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const controlsRef = useRef<IScannerControls | null>(null);
-  const [problem, setProblem] = useState<CameraProblem | null>(null);
-  const [starting, setStarting] = useState(true);
-  const [found, setFound] = useState<string | null>(null);
-  const [torchOn, setTorchOn] = useState(false);
-  const [torchOk, setTorchOk] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  // keep latest callbacks without restarting the camera
+  const streamRef = useRef<MediaStream | null>(null);
+  const trackRef = useRef<MediaStreamTrack | null>(null);
+  const deviceRef = useRef<string | undefined>(undefined);
+  const triedAuto = useRef(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const cb = useRef({ onResult });
   cb.current = { onResult };
 
+  const [mode, setMode] = useState<'live' | 'photo'>('live');
+  const [attempt, setAttempt] = useState(0);
+  const [problem, setProblem] = useState<CameraProblem | null>(null);
+  const [starting, setStarting] = useState(true);
+  const [found, setFound] = useState<string | null>(null);
+  const [info, setInfo] = useState<TrackInfo | null>(null);
+  const [cams, setCams] = useState<Cam[]>([]);
+  const [zoom, setZoomState] = useState(1);
+  const [torchOn, setTorchOn] = useState(false);
+  const [ring, setRing] = useState<{ x: number; y: number } | null>(null);
+  const [engine, setEngine] = useState('');
+  const [photoMsg, setPhotoMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const finish = (text: string, format: string) => {
+    try {
+      navigator.vibrate?.(200);
+    } catch {
+      /* unsupported */
+    }
+    setFound(text);
+    // brief success feedback, then hand the value back
+    window.setTimeout(() => cb.current.onResult(text, format), 650);
+  };
+
+  // ---- live camera ----
   useEffect(() => {
+    if (mode !== 'live') return;
     let cancelled = false;
+    let done = false;
+    let timer = 0;
     let last = '';
     let count = 0;
-    let done = false;
     setProblem(null);
     setStarting(true);
-
-    const stop = () => {
-      try {
-        controlsRef.current?.stop();
-      } catch {
-        /* already stopped */
-      }
-      controlsRef.current = null;
-      const v = videoRef.current;
-      (v?.srcObject as MediaStream | null)?.getTracks().forEach((t) => t.stop());
-    };
+    setTorchOn(false);
 
     (async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('unsupported'), { name: 'Unsupported' });
-        const reader = createReader();
-        const controls = await reader.decodeFromConstraints(
-          {
-            audio: false,
-            video: {
-              facingMode: { ideal: 'environment' }, // rear camera
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
-            },
-          },
-          videoRef.current!,
-          (result) => {
-            if (!result || done || cancelled) return;
-            const text = normaliseSerial(result.getText());
-            if (!text) return;
-            if (text === last) count += 1;
-            else {
-              last = text;
-              count = 1;
-            }
-            if (count < CONFIRM_READS) return;
-            done = true;
-            try {
-              navigator.vibrate?.(200);
-            } catch {
-              /* unsupported */
-            }
-            stop(); // close the camera straight away
-            setFound(text);
-            // brief success feedback, then hand the value back
-            window.setTimeout(() => cb.current.onResult(text, String(result.getBarcodeFormat())), 650);
-          },
-        );
-        if (cancelled) {
-          controls.stop();
-          return;
-        }
-        controlsRef.current = controls;
-        setStarting(false);
+        const stream = await openStream(deviceRef.current);
+        if (cancelled) return stopStream(stream);
+        streamRef.current = stream;
+        const video = videoRef.current!;
+        video.srcObject = stream;
+        await video.play().catch(() => {});
+        const track = stream.getVideoTracks()[0];
+        trackRef.current = track;
+        const ti = await tuneTrack(track);
+        if (cancelled) return;
+        setInfo(ti);
+        setZoomState(1);
+        const list = await listBackCameras().catch(() => []);
+        if (cancelled) return;
+        setCams(list);
 
-        const track = (videoRef.current?.srcObject as MediaStream | null)?.getVideoTracks()[0];
-        if (track) {
-          const caps = (track.getCapabilities?.() ?? {}) as MediaTrackCapabilities & { torch?: boolean; focusMode?: string[] };
-          setTorchOk(!!caps.torch);
-          if (caps.focusMode?.includes('continuous')) {
-            track.applyConstraints({ advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet] }).catch(() => {});
+        // Android: this lens has no autofocus (often the ultra-wide). Look for one that does.
+        if (ti.focusKnown && !ti.continuousFocus && list.length > 1 && !triedAuto.current) {
+          triedAuto.current = true;
+          const better = await findFocusableCamera(list, ti.deviceId);
+          if (cancelled) return;
+          if (better) {
+            deviceRef.current = better;
+            stopStream(stream);
+            setAttempt((n) => n + 1);
+            return;
           }
         }
+        setStarting(false);
+
+        let det: Detector = await createDetector();
+        setEngine(det.kind === 'native' ? 'Android scanner' : 'Scanner');
+        const tick = async () => {
+          if (cancelled || done) return;
+          if (video.readyState >= 2 && video.videoWidth > 0) {
+            try {
+              const res = await det.detect(video);
+              const text = res.length ? normaliseSerial(res[0].text) : '';
+              if (text) {
+                if (text === last) count += 1;
+                else {
+                  last = text;
+                  count = 1;
+                }
+                if (count >= CONFIRM_READS) {
+                  done = true;
+                  stopStream(streamRef.current); // close the camera straight away
+                  finish(text, res[0].format);
+                  return;
+                }
+              }
+            } catch {
+              if (det.kind === 'native') det = createWasmDetector(); // native engine failed: switch
+            }
+          }
+          timer = window.setTimeout(tick, det.kind === 'native' ? 50 : 90);
+        };
+        tick();
       } catch (err) {
         if (cancelled) return;
         setStarting(false);
@@ -112,58 +140,132 @@ export default function BarcodeScanner({ title, onResult, onCancel, onManual }: 
 
     return () => {
       cancelled = true;
-      stop();
+      window.clearTimeout(timer);
+      stopStream(streamRef.current);
+      streamRef.current = null;
+      trackRef.current = null;
     };
-  }, [attempt]);
+  }, [mode, attempt]);
 
-  async function toggleTorch() {
-    const track = (videoRef.current?.srcObject as MediaStream | null)?.getVideoTracks()[0];
-    if (!track) return;
+  function onTapFocus(e: React.MouseEvent<HTMLDivElement>) {
+    const track = trackRef.current;
+    if (!track || found) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width;
+    const y = (e.clientY - r.top) / r.height;
+    setRing({ x: e.clientX - r.left, y: e.clientY - r.top });
+    window.setTimeout(() => setRing(null), 900);
+    tapFocus(track, x, y).catch(() => {});
+  }
+
+  async function changeZoom(z: number) {
+    if (!trackRef.current) return;
     try {
-      await track.applyConstraints({ advanced: [{ torch: !torchOn } as MediaTrackConstraintSet] });
-      setTorchOn(!torchOn);
+      await setZoom(trackRef.current, z);
+      setZoomState(z);
     } catch {
-      setTorchOk(false);
+      /* ignore */
     }
   }
+
+  async function toggleTorch() {
+    if (!trackRef.current) return;
+    try {
+      await setTorch(trackRef.current, !torchOn);
+      setTorchOn(!torchOn);
+    } catch {
+      setInfo((i) => (i ? { ...i, torch: false } : i));
+    }
+  }
+
+  function switchCamera() {
+    if (cams.length < 2) return;
+    const cur = cams.findIndex((c) => c.id === info?.deviceId);
+    deviceRef.current = cams[(cur + 1) % cams.length].id;
+    triedAuto.current = true;
+    stopStream(streamRef.current);
+    setAttempt((n) => n + 1);
+  }
+
+  // ---- scan from a close-up photo taken with the phone's own camera app ----
+  async function onPhotoPicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    setPhotoMsg('Reading barcode…');
+    try {
+      const res = await decodeImageFile(file);
+      if (res) {
+        const text = normaliseSerial(res.text);
+        if (text) return finish(text, res.format);
+      }
+      setPhotoMsg('No barcode found in that photo. Get closer, keep the barcode sharp and flat, avoid glare, then try again.');
+    } catch {
+      setPhotoMsg('That photo could not be read. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const zoomLevels = info?.zoom ? [1, 2, 3, 4, 5].filter((z) => z >= info.zoom!.min && z <= info.zoom!.max) : [];
 
   return (
     <div role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-50 flex flex-col bg-black text-white">
       <h2 className="px-4 pb-2 pt-[max(1rem,env(safe-area-inset-top))] text-center text-xl font-bold tracking-wide">{title}</h2>
+      <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onPhotoPicked} className="sr-only" tabIndex={-1} aria-hidden="true" />
 
-      {problem ? (
+      {mode === 'photo' ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
+          <p className="text-5xl" aria-hidden="true">📷</p>
+          <p className="text-xl font-semibold">Scan from a close-up photo</p>
+          <p className="max-w-sm text-base text-gray-200">
+            Your phone&apos;s camera app focuses much better than the live scanner. Take one sharp, close photo of the barcode
+            (fill the picture with it, tap it to focus) and the serial is read from the photo.
+          </p>
+          {found ? (
+            <div role="status" className="rounded-xl bg-green-700 px-4 py-3 text-lg font-bold">✓ BARCODE SCANNED · <span className="break-all font-mono">{found}</span></div>
+          ) : (
+            <>
+              {photoMsg && <p role={busy ? 'status' : 'alert'} className="max-w-sm text-base font-medium text-amber-300">{photoMsg}</p>}
+              <div className="flex w-full max-w-xs flex-col gap-3">
+                <button type="button" disabled={busy} onClick={() => fileRef.current?.click()} className="min-h-14 rounded-xl bg-white text-lg font-bold text-black disabled:opacity-50">
+                  📷 TAKE CLOSE-UP PHOTO
+                </button>
+                <button type="button" onClick={() => { setPhotoMsg(''); setMode('live'); }} className="min-h-14 rounded-xl border-2 border-white text-lg font-semibold">
+                  Back to live scanner
+                </button>
+                <button type="button" onClick={onManual} className="min-h-12 text-base underline">Enter serial manually</button>
+                <button type="button" onClick={onCancel} className="min-h-12 text-base underline">Cancel</button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : problem ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
           <p className="text-5xl" aria-hidden="true">🚫</p>
           <p role="alert" className="text-xl font-semibold">{problem.title}</p>
           <p className="max-w-sm text-base text-gray-200">{problem.help}</p>
           <div className="mt-2 flex w-full max-w-xs flex-col gap-3">
             {problem.kind !== 'unsupported' && problem.kind !== 'unavailable' && (
-              <button type="button" onClick={() => setAttempt((n) => n + 1)} className="min-h-14 rounded-xl bg-white text-lg font-bold text-black">
-                TRY AGAIN
-              </button>
+              <button type="button" onClick={() => setAttempt((n) => n + 1)} className="min-h-14 rounded-xl bg-white text-lg font-bold text-black">TRY AGAIN</button>
             )}
-            <button type="button" onClick={onManual} className="min-h-14 rounded-xl border-2 border-white text-lg font-semibold">
-              Enter serial manually
-            </button>
-            <button type="button" onClick={onCancel} className="min-h-12 text-base underline">
-              Cancel
-            </button>
+            <button type="button" onClick={() => setMode('photo')} className="min-h-14 rounded-xl border-2 border-white text-lg font-semibold">📷 Scan from a photo instead</button>
+            <button type="button" onClick={onManual} className="min-h-12 text-base underline">Enter serial manually</button>
+            <button type="button" onClick={onCancel} className="min-h-12 text-base underline">Cancel</button>
           </div>
         </div>
       ) : (
         <>
-          <div className="relative flex-1 overflow-hidden">
+          <div className="relative flex-1 overflow-hidden" onClick={onTapFocus}>
             {/* playsInline + muted are required for iOS Safari */}
             <video ref={videoRef} playsInline muted autoPlay className="absolute inset-0 h-full w-full object-cover" />
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div
-                className={`relative h-44 w-[86%] max-w-md rounded-2xl border-4 shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] ${
-                  found ? 'border-green-400' : 'border-white/90'
-                }`}
-              >
+              <div className={`relative h-44 w-[86%] max-w-md rounded-2xl border-4 shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] ${found ? 'border-green-400' : 'border-white/90'}`}>
                 {!found && !starting && <div className="absolute inset-x-3 top-1/2 h-0.5 animate-pulse bg-red-500" />}
               </div>
             </div>
+            {ring && <span className="pointer-events-none absolute h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-amber-300" style={{ left: ring.x, top: ring.y }} />}
             {found && (
               <div role="status" className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-green-700/85">
                 <p className="text-6xl" aria-hidden="true">✓</p>
@@ -175,22 +277,40 @@ export default function BarcodeScanner({ title, onResult, onCancel, onManual }: 
           </div>
 
           <div className="space-y-3 px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 text-center">
-            <p className="text-base text-gray-200">Position the barcode inside the frame</p>
-            <div className="flex gap-3">
-              {torchOk && !found && (
-                <button
-                  type="button"
-                  onClick={toggleTorch}
-                  aria-pressed={torchOn}
-                  className={`min-h-14 flex-1 rounded-xl border-2 text-lg font-semibold ${torchOn ? 'border-amber-400 bg-amber-400 text-black' : 'border-white'}`}
-                >
-                  🔦 Flashlight {torchOn ? 'ON' : 'OFF'}
-                </button>
-              )}
-              <button type="button" onClick={onCancel} className="min-h-14 flex-1 rounded-xl bg-white text-lg font-bold text-black">
-                CANCEL
+            {!found && (
+              <p className="text-sm text-gray-200">
+                Hold the phone 10-20 cm away and <strong>tap the barcode to focus</strong>.
+                {zoomLevels.length > 1 ? ' Tiny barcode? Hold it further back and use zoom.' : ' Tiny barcode? Use "Scan from photo".'}
+                {engine && <span className="text-gray-400"> · {engine}</span>}
+              </p>
+            )}
+            {!found && zoomLevels.length > 1 && (
+              <div role="group" aria-label="Zoom" className="flex justify-center gap-2">
+                {zoomLevels.map((z) => (
+                  <button key={z} type="button" aria-pressed={zoom === z} onClick={() => changeZoom(z)} className={`min-h-12 min-w-14 rounded-xl border-2 text-lg font-bold ${zoom === z ? 'border-amber-400 bg-amber-400 text-black' : 'border-white'}`}>
+                    {z}×
+                  </button>
+                ))}
+              </div>
+            )}
+            {!found && (
+              <div className="flex gap-2">
+                {info?.torch && (
+                  <button type="button" onClick={toggleTorch} aria-pressed={torchOn} className={`min-h-12 flex-1 rounded-xl border-2 text-base font-semibold ${torchOn ? 'border-amber-400 bg-amber-400 text-black' : 'border-white'}`}>
+                    🔦 Torch {torchOn ? 'ON' : 'OFF'}
+                  </button>
+                )}
+                {cams.length > 1 && (
+                  <button type="button" onClick={switchCamera} className="min-h-12 flex-1 rounded-xl border-2 border-white text-base font-semibold">🔄 Switch camera</button>
+                )}
+              </div>
+            )}
+            {!found && (
+              <button type="button" onClick={() => { stopStream(streamRef.current); setMode('photo'); }} className="min-h-12 w-full rounded-xl border-2 border-white text-base font-semibold">
+                📷 Scan from photo (best for tiny barcodes)
               </button>
-            </div>
+            )}
+            <button type="button" onClick={onCancel} className="min-h-14 w-full rounded-xl bg-white text-lg font-bold text-black">CANCEL</button>
           </div>
         </>
       )}
