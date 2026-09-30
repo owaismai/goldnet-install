@@ -37,6 +37,8 @@ jobs:
         env:
           BASE_PATH: ${{ vars.BASE_PATH || format('/{0}/', github.event.repository.name) }}
           VITE_WHATSAPP_NUMBER: ${{ vars.VITE_WHATSAPP_NUMBER || '27689197093' }}
+          # Public key for Google address search (restrict it to this site in Google Cloud). Empty = off.
+          VITE_GOOGLE_MAPS_API_KEY: ${{ vars.VITE_GOOGLE_MAPS_API_KEY }}
 
       - uses: actions/configure-pages@v5
 

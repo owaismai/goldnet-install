@@ -6,7 +6,7 @@ import CPESection from './sections/CPESection.tsx';
 import RouterSection from './sections/RouterSection.tsx';
 import AdditionalInformationSection from './sections/AdditionalInformationSection.tsx';
 import ReviewSection from './sections/ReviewSection.tsx';
-import { emptyForm, STEPS } from './types.ts';
+import { emptyForm, STEPS, TECHNICIANS } from './types.ts';
 import type { FormState, StepId } from './types.ts';
 import { validateStep } from './utils/validation.ts';
 import { clearSaved, loadSaved, loadTechnician, save, saveTechnician } from './utils/storage.ts';
@@ -14,7 +14,11 @@ import { clearPhotos } from './utils/photoStore.ts';
 
 function initial(): { form: FormState; step: StepId } {
   const saved = loadSaved();
-  if (saved) return saved;
+  if (saved) {
+    // a draft from before the dropdown may hold a free-text name: fall back to the remembered choice
+    if (!(TECHNICIANS as readonly string[]).includes(saved.form.technician)) saved.form.technician = loadTechnician();
+    return saved;
+  }
   return { form: { ...emptyForm(), technician: loadTechnician() }, step: 'customer' };
 }
 

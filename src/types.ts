@@ -1,6 +1,14 @@
 // Shared form types. Field names/labels follow the reference WhatsForm
 // ("Osama Customer Details", https://whatsform.com/g8ztfa).
 
+/** Installers shown in the Technician dropdown (required). */
+export const TECHNICIANS = ['Osama', 'Waathiq', 'Donnovan', 'Bashir', 'Team Osama'] as const;
+
+export interface GeoPoint {
+  lat: number;
+  lng: number;
+}
+
 export type SerialSource = 'barcode' | 'manual' | null;
 
 /** Checkbox/radio answer, with the reference form's optional "Other" text. */
@@ -18,6 +26,8 @@ export interface FormState {
   phone: string;
   idNumber: string;
   streetAddress: string;
+  /** Set when the address came from Google Maps or the phone's location; used for the map pin in the message. */
+  location: GeoPoint | null;
   // Equipment installed
   cpeModel: Choice;
   routerModel: Choice;
@@ -75,7 +85,7 @@ function today(): string {
 
 export function emptyForm(): FormState {
   return {
-    fullName: '', email: '', phone: '', idNumber: '', streetAddress: '',
+    fullName: '', email: '', phone: '', idNumber: '', streetAddress: '', location: null,
     cpeModel: noChoice(), routerModel: noChoice(),
     internetService: noChoice(), startDate: today(), installFee: noChoice(),
     routerSite: noChoice(), cashCollected: noChoice(), cashReceipt: '', technician: '',

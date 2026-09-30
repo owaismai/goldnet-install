@@ -5,6 +5,7 @@ import type { FormState } from '../src/types.ts';
 import { buildMessage, buildWhatsAppUrl } from '../src/utils/whatsapp.ts';
 import { serialsIdentical, validateAll, validateStep } from '../src/utils/validation.ts';
 import { normaliseSerial } from '../src/utils/serial.ts';
+import { formatNominatim, mapsLink, stripCountry } from '../src/utils/address.ts';
 
 function complete(): FormState {
   return {
@@ -21,7 +22,7 @@ function complete(): FormState {
     signal: '62', speedtest: '48', clientType: 'New',
     photosTaken: { selected: ['CPE'], other: '' },
     wifiName: 'Smith-Home', wifiPassword: 'P@ss w0rd&1',
-    technician: 'Owais', comments: 'Installation completed successfully.',
+    technician: 'Osama', comments: 'Installation completed successfully.',
   };
 }
 
@@ -66,7 +67,7 @@ test('message contains serials, sources and notes', () => {
   assert.match(m, /Cash Collected: Paid by EFT/);
   assert.match(m, /Signal: -62 dBm/);
   assert.match(m, /Customer Wi-Fi:\nWi-Fi Name: Smith-Home\nWi-Fi Password: P@ss w0rd&1/);
-  assert.match(m, /Technician:\nOwais/);
+  assert.match(m, /Technician:\nOsama/);
   assert.match(m, /Notes:\nInstallation completed successfully\./);
 });
 
@@ -84,4 +85,29 @@ test('WhatsApp URL: recipient 27689197093, correctly encoded, round-trips', () =
 
 test('normaliseSerial strips whitespace and control chars only', () => {
   assert.equal(normaliseSerial('  G1UH44N009260\r\n'), 'G1UH44N009260');
+});
+
+test('technician is required and must be one of the dropdown names', () => {
+  assert.ok(validateStep('installation', { ...complete(), technician: '' }).technician);
+  assert.ok(validateStep('installation', { ...complete(), technician: 'Owais' }).technician, 'old free-text names are rejected');
+  for (const n of ['Osama', 'Waathiq', 'Donnovan', 'Bashir', 'Team Osama']) {
+    assert.equal(validateStep('installation', { ...complete(), technician: n }).technician, undefined, n);
+  }
+});
+
+test('address helpers: pin link, search link, Nominatim formatting', () => {
+  assert.equal(mapsLink('x', { lat: -29.85, lng: 31.02 }), 'https://www.google.com/maps?q=-29.850000,31.020000');
+  assert.equal(mapsLink(' 12 Main Rd, Durban ', null), 'https://www.google.com/maps/search/?api=1&query=12%20Main%20Rd%2C%20Durban');
+  assert.equal(stripCountry('12 Main Rd, Durban, 4001, South Africa'), '12 Main Rd, Durban, 4001');
+  assert.equal(
+    formatNominatim({ address: { house_number: '12', road: 'Main Road', suburb: 'Umbilo', city: 'Durban', postcode: '4001', country: 'South Africa' } }),
+    '12 Main Road, Umbilo, Durban, 4001',
+  );
+  assert.equal(formatNominatim({ display_name: 'Somewhere, South Africa' }), 'Somewhere');
+});
+
+test('message carries a Google Maps link for the address', () => {
+  const pin = buildMessage({ ...complete(), location: { lat: -29.85, lng: 31.02 } });
+  assert.match(pin, /Address:\n123 Example Street & Co\nMap: https:\/\/www\.google\.com\/maps\?q=-29\.850000,31\.020000/);
+  assert.match(buildMessage(complete()), /Map: https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=123%20Example/);
 });

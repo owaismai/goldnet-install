@@ -1,4 +1,5 @@
-import { Card, ChoiceField, SectionHeader, TextField } from '../components/Fields.tsx';
+import { Card, ChoiceField, SectionHeader, SelectField, TextField } from '../components/Fields.tsx';
+import { TECHNICIANS } from '../types.ts';
 import type { SectionProps } from './types.ts';
 
 export const CPE_MODELS = ['Reyee 460G', 'Reyee 460F', 'Cambium 4525L'];
@@ -7,6 +8,14 @@ export const ROUTER_MODELS = ['Mikrotik HAP ac2', 'M1300 AC', 'M1200 AC', 'M3000
 export default function InstallationSection({ form, errors, update }: SectionProps) {
   return (
     <>
+      <Card>
+        <SectionHeader>Technician</SectionHeader>
+        <SelectField
+          label="Technician" required options={TECHNICIANS} placeholder="Select your name…"
+          hint="Remembered on this phone"
+          value={form.technician} error={errors.technician} onChange={(v) => update({ technician: v })}
+        />
+      </Card>
       <Card>
         <SectionHeader>Equipment installed</SectionHeader>
         <ChoiceField
@@ -39,7 +48,6 @@ export default function InstallationSection({ form, errors, update }: SectionPro
           value={form.cashCollected} error={errors.cashCollected} onChange={(v) => update({ cashCollected: v })}
         />
         <TextField label="Cash Receipt Number" value={form.cashReceipt} onChange={(v) => update({ cashReceipt: v })} />
-        <TextField label="Technician" hint="Your name (remembered on this phone)" autoComplete="name" value={form.technician} onChange={(v) => update({ technician: v })} />
       </Card>
     </>
   );

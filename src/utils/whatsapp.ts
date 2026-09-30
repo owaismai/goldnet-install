@@ -8,6 +8,7 @@
 
 import type { FormState } from '../types.ts';
 import { choiceText } from '../types.ts';
+import { mapsLink } from './address.ts';
 
 const line = (label: string, value: string) => `${label}: ${value || '-'}`;
 
@@ -28,6 +29,7 @@ export function buildMessage(f: FormState): string {
     ...(f.idNumber.trim() ? ['ID Number:', f.idNumber.trim()] : []),
     'Address:',
     f.streetAddress.trim(),
+    ...(f.streetAddress.trim() || f.location ? ['Map: ' + mapsLink(f.streetAddress, f.location)] : []),
     '',
     line('Internet Service', choiceText(f.internetService)),
     line('Start Date', f.startDate),

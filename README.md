@@ -22,6 +22,22 @@ required/optional flags. The two "Last 4 digits of serial" fields are replaced b
 
 The number is baked into the public bundle: it is **not secret**.
 
+## Address autofill (Google Maps)
+- **Use my current location** always works: phone GPS + OpenStreetMap reverse geocoding (no key). It also adds a
+  Google Maps pin link to the WhatsApp message.
+- **Google address search while typing** needs a Google Maps key (the app ships with it switched off):
+  1. console.cloud.google.com: create/select a project and attach a billing account (Google's monthly free credit
+     covers this usage).
+  2. APIs & Services > Library: enable **Maps JavaScript API** and **Places API (New)**.
+  3. APIs & Services > Credentials > Create credentials > API key. Restrict it: *Websites*
+     `https://owaismai.github.io/*` and *API restrictions* = those two APIs only. (The key is public in the
+     site's code by design; the restrictions are what protect it.)
+  4. GitHub repo > Settings > Secrets and variables > Actions > **Variables** > new variable
+     `VITE_GOOGLE_MAPS_API_KEY` = the key. Re-run the "Deploy to GitHub Pages" workflow.
+
+## Technicians
+The Technician dropdown (required, remembered on the phone) is the `TECHNICIANS` list in `src/types.ts`.
+
 ## Notes
 - Photos live only on the phone (IndexedDB) for the current form session; they are NOT sent with the WhatsApp
   message. Permanent photo storage needs a backend/storage service (future version).

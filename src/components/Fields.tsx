@@ -164,3 +164,35 @@ export function StarRating({ label, hint, value, onChange }: { label: string; hi
     </Field>
   );
 }
+
+interface SelectProps extends InputProps {
+  options: readonly string[];
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}
+
+/** Native dropdown (opens the phone's own picker). A value not in `options` shows the placeholder. */
+export function SelectField({ label, required, hint, error, options, value, onChange, placeholder = 'Select…' }: SelectProps) {
+  const id = useId();
+  return (
+    <Field label={label} required={required} hint={hint} error={error} htmlFor={id}>
+      <select
+        id={id}
+        value={options.includes(value) ? value : ''}
+        aria-invalid={!!error}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${inputCls} appearance-auto`}
+      >
+        <option value="" disabled>
+          {placeholder}
+        </option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
+}

@@ -1,5 +1,5 @@
 import type { FormState, StepId } from '../types.ts';
-import { OTHER } from '../types.ts';
+import { OTHER, TECHNICIANS } from '../types.ts';
 
 export type Errors = Record<string, string>;
 
@@ -40,6 +40,7 @@ export function validateStep(step: StepId, f: FormState): Errors {
       break;
 
     case 'installation':
+      if (!(TECHNICIANS as readonly string[]).includes(f.technician)) e.technician = 'Please select your name';
       needChoice('cpeModel', f.cpeModel);
       needChoice('routerModel', f.routerModel);
       needChoice('internetService', f.internetService);

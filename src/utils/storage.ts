@@ -1,5 +1,5 @@
 import type { FormState, StepId } from '../types.ts';
-import { emptyForm } from '../types.ts';
+import { emptyForm, TECHNICIANS } from '../types.ts';
 
 const KEY = 'goldnet-install-form-v1';
 
@@ -37,16 +37,19 @@ export function clearSaved(): void {
   }
 }
 
-/** Technician name is remembered across installations. */
+/** The technician selection is remembered on this phone across installations. */
 const TECH = 'goldnet-install-technician';
+const valid = (n: string): boolean => (TECHNICIANS as readonly string[]).includes(n);
 export const loadTechnician = (): string => {
   try {
-    return localStorage.getItem(TECH) ?? '';
+    const n = localStorage.getItem(TECH) ?? '';
+    return valid(n) ? n : '';
   } catch {
     return '';
   }
 };
 export const saveTechnician = (n: string): void => {
+  if (!valid(n)) return; // never overwrite a remembered name with an empty/old value
   try {
     localStorage.setItem(TECH, n);
   } catch {
