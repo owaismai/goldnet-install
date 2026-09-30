@@ -32,6 +32,9 @@ The number is baked into the public bundle: it is **not secret**.
 - Focus for small barcodes: continuous autofocus is requested, other rear cameras are tried if the default lens has
   no autofocus, tap the picture to refocus, zoom 1-5x and torch appear when the phone allows it (iPhone Safari
   exposes no focus/zoom controls, so they are hidden there), and "Scan from photo" reads the barcode from a photo
-  taken with the phone's camera app.
+  taken with the phone's camera app. The live preview is low resolution, so on Android the scanner also grabs
+  high-resolution stills (ImageCapture, which runs a real autofocus) after ~2.5 s without a read, asks for a 4K
+  preview, and offers manual Close/Mid focus presets. A small grey line under the scanner shows the camera's
+  capabilities, useful when reporting a problem.
 - Photos: a wa.me link can carry only text, so after the message opens, the photos are sent through the phone's
   share sheet (Web Share API with files) into the same WhatsApp chat. Browsers without file sharing get Save links.

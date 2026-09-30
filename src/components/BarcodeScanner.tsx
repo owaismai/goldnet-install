@@ -4,7 +4,7 @@ import type { Detector } from '../utils/barcode.ts';
 import { normaliseSerial } from '../utils/serial.ts';
 import { describeCameraError } from '../utils/camera.ts';
 import type { CameraProblem } from '../utils/camera.ts';
-import { findFocusableCamera, listBackCameras, openStream, setTorch, setZoom, stopStream, tapFocus, tuneTrack } from '../utils/scannerCamera.ts';
+import { createStillGrabber, findFocusableCamera, listBackCameras, openStream, setFocus, setTorch, setZoom, stopStream, tapFocus, tuneTrack } from '../utils/scannerCamera.ts';
 import type { Cam, TrackInfo } from '../utils/scannerCamera.ts';
 
 interface Props {
@@ -16,6 +16,11 @@ interface Props {
 
 // Require the same value on two consecutive decodes: filters one-off misreads.
 const CONFIRM_READS = 2;
+// If the live picture has not decoded after this long, also read high-resolution stills (ImageCapture).
+const ASSIST_AFTER_MS = 2500;
+
+type FocusPreset = 'auto' | 'close' | 'mid';
+const FOCUS_METRES: Record<FocusPreset, number | null> = { auto: null, close: 0.12, mid: 0.25 };
 
 /**
  * Full-screen rear-camera scanner. Mounted only after the technician presses a SCAN button, so the
@@ -46,6 +51,8 @@ export default function BarcodeScanner({ title, onResult, onCancel, onManual }: 
   const [engine, setEngine] = useState('');
   const [photoMsg, setPhotoMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  const [assist, setAssist] = useState(false);
+  const [focusPreset, setFocusPreset] = useState<FocusPreset>('auto');
 
   const finish = (text: string, format: string) => {
     try {
@@ -64,16 +71,22 @@ export default function BarcodeScanner({ title, onResult, onCancel, onManual }: 
     let cancelled = false;
     let done = false;
     let timer = 0;
+    let assistTimer = 0;
     let last = '';
     let count = 0;
     setProblem(null);
     setStarting(true);
     setTorchOn(false);
+    setAssist(false);
+    setFocusPreset('auto');
 
     (async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('unsupported'), { name: 'Unsupported' });
-        const stream = await openStream(deviceRef.current);
+        // Preview resolution matters for tiny barcodes: ask for 4K where the fast native detector exists
+        // (Android Chrome); the browser gives the best it has. WASM engine (iPhone): 1080p keeps it smooth.
+        const hasNative = 'BarcodeDetector' in window;
+        const stream = await openStream(deviceRef.current, hasNative ? 3840 : 1920, hasNative ? 2160 : 1080);
         if (cancelled) return stopStream(stream);
         streamRef.current = stream;
         const video = videoRef.current!;
@@ -131,6 +144,34 @@ export default function BarcodeScanner({ title, onResult, onCancel, onManual }: 
           timer = window.setTimeout(tick, det.kind === 'native' ? 50 : 90);
         };
         tick();
+
+        // Still-capture assist: stills run a real autofocus and use the full sensor, so a tiny barcode
+        // that is too small/soft in the live preview can still be read (same as "Scan from photo").
+        const grab = createStillGrabber(track);
+        if (grab) {
+          assistTimer = window.setTimeout(async () => {
+            if (cancelled || done) return;
+            setAssist(true);
+            while (!cancelled && !done) {
+              try {
+                const blob = await grab();
+                if (cancelled || done) break;
+                const r = await decodeImageFile(blob, { tiles: false });
+                const text = r ? normaliseSerial(r.text) : '';
+                if (r && text && !done && !cancelled) {
+                  done = true;
+                  stopStream(streamRef.current);
+                  finish(text, r.format);
+                  break;
+                }
+              } catch {
+                /* capture failed (busy/unsupported): try again */
+              }
+              await new Promise((res) => window.setTimeout(res, 600));
+            }
+            if (!cancelled) setAssist(false);
+          }, ASSIST_AFTER_MS);
+        }
       } catch (err) {
         if (cancelled) return;
         setStarting(false);
@@ -141,6 +182,7 @@ export default function BarcodeScanner({ title, onResult, onCancel, onManual }: 
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+      window.clearTimeout(assistTimer);
       stopStream(streamRef.current);
       streamRef.current = null;
       trackRef.current = null;
@@ -175,6 +217,16 @@ export default function BarcodeScanner({ title, onResult, onCancel, onManual }: 
       setTorchOn(!torchOn);
     } catch {
       setInfo((i) => (i ? { ...i, torch: false } : i));
+    }
+  }
+
+  async function changeFocus(preset: FocusPreset) {
+    if (!trackRef.current) return;
+    try {
+      await setFocus(trackRef.current, FOCUS_METRES[preset]);
+      setFocusPreset(preset);
+    } catch {
+      /* ignore */
     }
   }
 
@@ -281,7 +333,11 @@ export default function BarcodeScanner({ title, onResult, onCancel, onManual }: 
               <p className="text-sm text-gray-200">
                 Hold the phone 10-20 cm away and <strong>tap the barcode to focus</strong>.
                 {zoomLevels.length > 1 ? ' Tiny barcode? Hold it further back and use zoom.' : ' Tiny barcode? Use "Scan from photo".'}
-                {engine && <span className="text-gray-400"> · {engine}</span>}
+              </p>
+            )}
+            {!found && assist && (
+              <p role="status" className="text-sm font-semibold text-amber-300">
+                Reading high-resolution photos… keep the phone steady, 15-20 cm from the barcode.
               </p>
             )}
             {!found && zoomLevels.length > 1 && (
@@ -289,6 +345,16 @@ export default function BarcodeScanner({ title, onResult, onCancel, onManual }: 
                 {zoomLevels.map((z) => (
                   <button key={z} type="button" aria-pressed={zoom === z} onClick={() => changeZoom(z)} className={`min-h-12 min-w-14 rounded-xl border-2 text-lg font-bold ${zoom === z ? 'border-amber-400 bg-amber-400 text-black' : 'border-white'}`}>
                     {z}×
+                  </button>
+                ))}
+              </div>
+            )}
+            {!found && info?.manualFocus && (
+              <div role="group" aria-label="Focus" className="flex items-center justify-center gap-2">
+                <span className="text-sm text-gray-300">Focus</span>
+                {(['auto', 'close', 'mid'] as FocusPreset[]).map((f) => (
+                  <button key={f} type="button" aria-pressed={focusPreset === f} onClick={() => changeFocus(f)} className={`min-h-12 flex-1 rounded-xl border-2 text-base font-semibold ${focusPreset === f ? 'border-amber-400 bg-amber-400 text-black' : 'border-white'}`}>
+                    {f === 'auto' ? 'Auto' : f === 'close' ? 'Close 12 cm' : 'Mid 25 cm'}
                   </button>
                 ))}
               </div>
@@ -311,6 +377,7 @@ export default function BarcodeScanner({ title, onResult, onCancel, onManual }: 
               </button>
             )}
             <button type="button" onClick={onCancel} className="min-h-14 w-full rounded-xl bg-white text-lg font-bold text-black">CANCEL</button>
+            {info && <p className="break-words text-[11px] leading-tight text-gray-500">{info.summary}{engine ? ` · ${engine}` : ''}</p>}
           </div>
         </>
       )}

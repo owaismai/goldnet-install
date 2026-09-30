@@ -67,7 +67,7 @@ let photoDetector: Promise<Detector> | null = null;
  * better than a live web video stream). Tries the whole image, then overlapping tiles so a tiny
  * barcode in a big photo is still found. Returns null when nothing is found.
  */
-export async function decodeImageFile(file: Blob): Promise<Found | null> {
+export async function decodeImageFile(file: Blob, opts: { tiles?: boolean } = {}): Promise<Found | null> {
   photoDetector ??= createDetector();
   const detectors: Detector[] = [await photoDetector];
   if (detectors[0].kind === 'native') detectors.push(createWasmDetector()); // second opinion
@@ -78,6 +78,7 @@ export async function decodeImageFile(file: Blob): Promise<Found | null> {
       const whole = await det.detect(bmp).catch(() => []);
       if (whole.length) return whole[0];
     }
+    if (opts.tiles === false) return null;
     // Tiles: 3x3 grid of half-size windows (50% overlap), each decoded at full resolution.
     const w = Math.floor(bmp.width / 2);
     const h = Math.floor(bmp.height / 2);

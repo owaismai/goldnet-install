@@ -13,6 +13,7 @@ interface ExtCaps extends MediaTrackCapabilities {
   torch?: boolean;
   exposureMode?: string[];
   whiteBalanceMode?: string[];
+  focusDistance?: { min: number; max: number; step?: number };
 }
 
 export interface TrackInfo {
@@ -22,7 +23,11 @@ export interface TrackInfo {
   tapFocus: boolean;
   torch: boolean;
   zoom: { min: number; max: number } | null;
+  /** Manual focus distance range in metres (close-up presets), when the camera allows it. */
+  manualFocus: { min: number; max: number } | null;
   deviceId: string | undefined;
+  /** One line of camera facts, shown small on the scanner so problems can be diagnosed from a screenshot. */
+  summary: string;
 }
 
 const caps = (t: MediaStreamTrack): ExtCaps => (t.getCapabilities?.() ?? {}) as ExtCaps;
@@ -51,13 +56,30 @@ export async function tuneTrack(track: MediaStreamTrack): Promise<TrackInfo> {
   if (continuousFocus) await adv(track, { focusMode: 'continuous' }).catch(() => {});
   if (c.exposureMode?.includes('continuous')) await adv(track, { exposureMode: 'continuous' }).catch(() => {});
   if (c.whiteBalanceMode?.includes('continuous')) await adv(track, { whiteBalanceMode: 'continuous' }).catch(() => {});
+  const st = track.getSettings();
+  const zoom = c.zoom && c.zoom.max > c.zoom.min ? { min: c.zoom.min, max: c.zoom.max } : null;
+  const manualFocus =
+    c.focusMode?.includes('manual') && c.focusDistance && c.focusDistance.max > c.focusDistance.min
+      ? { min: c.focusDistance.min, max: c.focusDistance.max }
+      : null;
+  const summary = [
+    track.label || 'camera',
+    st.width && st.height ? `${st.width}x${st.height}` : '',
+    `focus: ${c.focusMode?.join('/') ?? 'no control'}`,
+    zoom ? `zoom ${zoom.min}-${zoom.max}` : '',
+    'ImageCapture' in window ? 'stills ok' : 'no stills',
+  ]
+    .filter(Boolean)
+    .join(' · ');
   return {
     focusKnown,
     continuousFocus,
     tapFocus: !!c.focusMode?.includes('single-shot') || continuousFocus,
     torch: !!c.torch,
-    zoom: c.zoom && c.zoom.max > c.zoom.min ? { min: c.zoom.min, max: c.zoom.max } : null,
-    deviceId: track.getSettings().deviceId,
+    zoom,
+    manualFocus,
+    deviceId: st.deviceId,
+    summary,
   };
 }
 
@@ -81,6 +103,45 @@ export async function tapFocus(track: MediaStreamTrack, x: number, y: number): P
       if (c.focusMode?.includes('continuous')) adv(track, { focusMode: 'continuous' }).catch(() => {});
     }, 1200);
   }
+}
+
+/** Back to autofocus (null) or lock focus at a fixed distance in metres (for close-up barcodes). */
+export async function setFocus(track: MediaStreamTrack, metres: number | null): Promise<void> {
+  const c = caps(track);
+  if (metres === null) return adv(track, { focusMode: c.focusMode?.includes('continuous') ? 'continuous' : 'single-shot' });
+  const d = c.focusDistance;
+  const m = d ? Math.min(Math.max(metres, d.min), d.max) : metres;
+  return adv(track, { focusMode: 'manual', focusDistance: m });
+}
+
+interface ImageCaptureLike {
+  takePhoto(o?: Record<string, unknown>): Promise<Blob>;
+  getPhotoCapabilities(): Promise<{ imageWidth?: { max: number } }>;
+}
+
+/**
+ * High-resolution still grabber (ImageCapture.takePhoto, Chrome on Android). A still runs a real
+ * autofocus and uses the full sensor, like the camera app, so tiny barcodes that are too small
+ * and soft in the low-resolution live preview are readable. Returns null when unsupported.
+ */
+export function createStillGrabber(track: MediaStreamTrack): (() => Promise<Blob>) | null {
+  const IC = (window as unknown as { ImageCapture?: new (t: MediaStreamTrack) => ImageCaptureLike }).ImageCapture;
+  if (!IC) return null;
+  const ic = new IC(track);
+  let opts: Record<string, unknown> | undefined;
+  return async () => {
+    if (!opts) {
+      opts = {};
+      try {
+        const pc = await ic.getPhotoCapabilities();
+        // about 8 MP: sharp enough for tiny labels, quick enough to decode repeatedly
+        if (pc.imageWidth?.max) opts = { imageWidth: Math.min(pc.imageWidth.max, 3264) };
+      } catch {
+        /* use the default size */
+      }
+    }
+    return ic.takePhoto(opts);
+  };
 }
 
 export const setZoom = (t: MediaStreamTrack, z: number) => adv(t, { zoom: z });
