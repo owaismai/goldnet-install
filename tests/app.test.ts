@@ -111,3 +111,14 @@ test('message carries a Google Maps link for the address', () => {
   assert.match(pin, /Address:\n123 Example Street & Co\nMap: https:\/\/www\.google\.com\/maps\?q=-29\.850000,31\.020000/);
   assert.match(buildMessage(complete()), /Map: https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=123%20Example/);
 });
+
+test('address formatting skips municipal ward labels', () => {
+  assert.equal(
+    formatNominatim({ address: { house_number: '380', road: 'Doctor Pixley Kaseme Street', suburb: 'eThekwini Ward 28', city: 'Durban', postcode: '4001' } }),
+    '380 Doctor Pixley Kaseme Street, Durban, 4001',
+  );
+  assert.equal(
+    formatNominatim({ address: { road: 'Sambane Crescent', suburb: 'eThekwini Ward 45', town: 'KwaMashu', postcode: '4360' } }),
+    'Sambane Crescent, KwaMashu, 4360',
+  );
+});

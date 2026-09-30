@@ -12,7 +12,9 @@ interface NominatimResult {
 export function formatNominatim(r: NominatimResult): string {
   const a = r.address ?? {};
   const street = [a.house_number, a.road].filter(Boolean).join(' ');
-  const area = a.suburb || a.neighbourhood || a.village || a.hamlet || a.city_district;
+  // OpenStreetMap often labels the suburb "eThekwini Ward 28": a municipal ward, not a place name. Skip those.
+  const real = (v?: string) => (v && !/\bward\s*\d+/i.test(v) ? v : undefined);
+  const area = real(a.suburb) || real(a.neighbourhood) || real(a.quarter) || real(a.village) || real(a.hamlet) || real(a.city_district);
   const town = a.city || a.town || a.municipality;
   const line = [street, area, town, a.postcode].filter(Boolean).join(', ');
   return line || stripCountry(r.display_name ?? '');

@@ -93,16 +93,67 @@ export async function resolveSuggestion(s: Suggestion): Promise<{ address: strin
   };
 }
 
-export function getPosition(): Promise<GeolocationPosition> {
+export type LocationPermission = 'granted' | 'prompt' | 'denied' | 'unknown';
+
+export async function locationPermission(): Promise<LocationPermission> {
+  try {
+    if (!navigator.permissions?.query) return 'unknown';
+    return (await navigator.permissions.query({ name: 'geolocation' as PermissionName })).state as LocationPermission;
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * Best GPS fix within `maxMs`: watches the position and stops early once it is accurate to `goodMetres`.
+ * If there is no fix after a few seconds (indoors), also asks for a quick network/Wi-Fi location so the
+ * technician still gets something. Rejects immediately when permission is denied.
+ */
+export function getBestPosition(maxMs = 15000, goodMetres = 40, onUpdate?: (accuracyM: number) => void): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) return reject(Object.assign(new Error('unsupported'), { code: 0 }));
-    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+    const geo = navigator.geolocation;
+    if (!geo) return reject(Object.assign(new Error('unsupported'), { code: 0 }));
+    let best: GeolocationPosition | null = null;
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      geo.clearWatch(watch);
+      window.clearTimeout(coarse);
+      window.clearTimeout(limit);
+      fn();
+    };
+    const consider = (pos: GeolocationPosition) => {
+      if (!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
+      onUpdate?.(Math.round(best.coords.accuracy));
+      if (pos.coords.accuracy <= goodMetres) finish(() => resolve(pos));
+    };
+    const fail = (err: GeolocationPositionError) => {
+      if (err.code === 1) finish(() => reject(err)); // permission denied: no point waiting
+    };
+    const watch = geo.watchPosition(consider, fail, { enableHighAccuracy: true, maximumAge: 0, timeout: maxMs });
+    const coarse = window.setTimeout(() => {
+      if (!best) geo.getCurrentPosition(consider, fail, { enableHighAccuracy: false, maximumAge: 60000, timeout: 6000 });
+    }, 5000);
+    const limit = window.setTimeout(() => {
+      if (best) finish(() => resolve(best!));
+      else finish(() => reject(Object.assign(new Error('timeout'), { code: 3 })));
+    }, maxMs);
   });
 }
 
 export async function reverseGeocode(lat: number, lng: number): Promise<string> {
   const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&accept-language=en&lat=${lat}&lon=${lng}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`reverse geocode ${res.status}`);
-  return formatNominatim(await res.json());
+  let last: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return formatNominatim(await res.json());
+      last = new Error(`address lookup ${res.status}`);
+    } catch (e) {
+      last = e;
+    }
+    await new Promise((r) => window.setTimeout(r, 800));
+  }
+  throw last;
 }

@@ -1,11 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Field } from './Fields.tsx';
 import type { GeoPoint } from '../types.ts';
-import { getPosition, googleEnabled, loadPlaces, resolveSuggestion, reverseGeocode, suggest } from '../utils/maps.ts';
+import { getBestPosition, googleEnabled, loadPlaces, locationPermission, resolveSuggestion, reverseGeocode, suggest } from '../utils/maps.ts';
 import type { Places, Suggestion } from '../utils/maps.ts';
+import { autoLocationTried, markAutoLocationTried } from '../utils/storage.ts';
 
 interface Props {
   value: string;
+  location: GeoPoint | null;
   error?: string;
   onChange: (address: string, location: GeoPoint | null) => void;
 }
@@ -16,32 +18,32 @@ const inputCls =
 const UNAVAILABLE = 'Google address search is not available right now. Type the address or use your current location.';
 
 /**
- * Street address with Google Maps autofill: suggestions while typing (needs the Google key), and a
- * "Use my current location" button (phone GPS, no key). Typing the address by hand always works.
+ * Street address. FIRST option: "Use my current location" (phone GPS fills the address, and runs by itself
+ * when a new installation starts with an empty address). Then typing with Google Maps suggestions (needs the
+ * Google key). Typing the address by hand always works.
  */
-export default function AddressField({ value, error, onChange }: Props) {
+export default function AddressField({ value, location, error, onChange }: Props) {
   const id = useId();
   const listId = useId();
   const [places, setPlaces] = useState<Places | null>(null);
   const [items, setItems] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [gpsBusy, setGpsBusy] = useState(false);
-  const [note, setNote] = useState('');
+  const [progress, setProgress] = useState('');
+  const [note, setNote] = useState<{ text: string; bad: boolean } | null>(null);
   const token = useRef<object | null>(null);
-  const skip = useRef(false); // do not search again right after a pick / GPS fill
+  const skipValue = useRef<string | null>(null); // a value we set ourselves (pick / GPS): do not search for it
   const seq = useRef(0);
+  const latest = useRef({ value, location, onChange });
+  latest.current = { value, location, onChange };
 
   // Load Google only when the field is first used.
   const warm = () => {
-    if (googleEnabled && !places)
-      loadPlaces().then((p) => (p ? setPlaces(p) : setNote(UNAVAILABLE)));
+    if (googleEnabled && !places) loadPlaces().then((p) => (p ? setPlaces(p) : setNote({ text: UNAVAILABLE, bad: true })));
   };
 
   useEffect(() => {
-    if (skip.current) {
-      skip.current = false;
-      return;
-    }
+    if (skipValue.current !== null && value === skipValue.current) return;
     const q = value.trim();
     if (!places || q.length < 3) {
       setItems([]);
@@ -59,7 +61,7 @@ export default function AddressField({ value, error, onChange }: Props) {
       } catch {
         if (mine === seq.current) {
           setItems([]);
-          setNote(UNAVAILABLE); // e.g. the Places API is not enabled for the key, or no internet
+          setNote({ text: UNAVAILABLE, bad: true }); // e.g. the Places API is not enabled for the key, or no internet
         }
       }
     }, 250);
@@ -67,47 +69,87 @@ export default function AddressField({ value, error, onChange }: Props) {
   }, [value, places]);
 
   async function pick(s: Suggestion) {
-    skip.current = true;
     setOpen(false);
     setItems([]);
     const r = await resolveSuggestion(s);
     token.current = null; // a new search session starts after each pick
-    skip.current = true;
-    onChange(r.address, r.location);
+    skipValue.current = r.address;
+    latest.current.onChange(r.address, r.location);
   }
 
-  async function useMyLocation() {
-    setNote('');
+  async function useMyLocation(auto = false) {
+    setNote(null);
     setGpsBusy(true);
+    setProgress('Finding your location…');
     try {
-      const pos = await getPosition();
+      const pos = await getBestPosition(15000, 40, (m) => setProgress(`Finding your location… (accurate to about ${m} m)`));
       const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      const addr = await reverseGeocode(loc.lat, loc.lng).catch(() => '');
-      skip.current = true;
+      const acc = Math.round(pos.coords.accuracy);
+      setProgress('Looking up the street address…');
+      let addr = '';
+      let lookupFailed = false;
+      try {
+        addr = await reverseGeocode(loc.lat, loc.lng);
+      } catch {
+        lookupFailed = true;
+      }
+      // never overwrite something the technician typed while we were searching
+      if (auto && latest.current.value.trim()) return;
+      const text = addr || latest.current.value;
+      skipValue.current = text;
       setOpen(false);
-      onChange(addr || value, loc);
+      latest.current.onChange(text, loc);
       setNote(
         addr
-          ? 'Address filled from your location. Check it and correct it if needed.'
-          : 'Location saved (map pin added) but no street address was found. Type the address.',
+          ? { text: `Address filled from your location (accurate to about ${acc} m). Check it and correct it if needed.`, bad: false }
+          : {
+              text: lookupFailed
+                ? 'Got your location, but the street address lookup failed (check your internet). A map pin was saved. Please type the address.'
+                : 'Got your location and saved a map pin, but no street address exists for this spot. Please type the address.',
+              bad: true,
+            },
       );
     } catch (e) {
+      if (auto && (e as { code?: number }).code === 1) return; // auto-run declined: stay quiet, the button is right there
       const code = (e as { code?: number }).code;
-      setNote(
-        code === 1
-          ? 'Location permission was denied. Allow location for this site in the browser settings, or type the address.'
-          : code === 3
-            ? 'Finding your location took too long. Move outside or try again, or type the address.'
-            : 'Your location is not available here. Type the address instead.',
-      );
+      setNote({
+        text:
+          code === 1
+            ? 'Location permission was denied. Allow Location for this site (tap the lock icon in the address bar > Permissions > Location), then press the button again. Or type the address.'
+            : code === 3
+              ? 'Could not get a GPS fix in time. Go outside or near a window and press the button again, or type the address.'
+              : 'Your location is not available on this device. Type the address instead.',
+        bad: true,
+      });
     } finally {
       setGpsBusy(false);
+      setProgress('');
     }
   }
 
+  // New installation with an empty address: fill it from the phone's location automatically (once).
+  useEffect(() => {
+    if (autoLocationTried() || latest.current.value.trim() || latest.current.location) return;
+    let alive = true;
+    locationPermission().then((perm) => {
+      if (!alive || perm === 'denied' || autoLocationTried()) return;
+      markAutoLocationTried();
+      void useMyLocation(true);
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
-    <Field label="Street Address" required error={error} htmlFor={id} hint={googleEnabled ? 'Start typing and pick your address from Google Maps' : undefined}>
-      <div className="relative space-y-2">
+    <Field label="Street Address" required error={error} htmlFor={id}>
+      <div className="relative space-y-3">
+        <button type="button" onClick={() => void useMyLocation()} disabled={gpsBusy} className="min-h-14 w-full rounded-xl bg-brand text-lg font-bold text-white shadow disabled:opacity-60">
+          {gpsBusy ? 'Finding your location…' : '📍 USE MY CURRENT LOCATION'}
+        </button>
+        {progress && <p role="status" className="text-sm text-gray-700">{progress}</p>}
+        <p className="text-center text-sm text-gray-600">{googleEnabled ? 'or start typing and pick the address from Google Maps' : 'or type the address'}</p>
         <input
           id={id}
           type="text"
@@ -135,10 +177,8 @@ export default function AddressField({ value, error, onChange }: Props) {
             ))}
           </ul>
         )}
-        <button type="button" onClick={useMyLocation} disabled={gpsBusy} className="min-h-12 w-full rounded-xl border-2 border-brand bg-white text-base font-semibold text-brand-dark disabled:opacity-50">
-          {gpsBusy ? 'Finding your location…' : '📍 Use my current location'}
-        </button>
-        {note && <p role="status" className="text-sm text-gray-700">{note}</p>}
+        {location && !note && <p className="text-sm text-green-800">✓ Map pin saved for this address.</p>}
+        {note && <p role={note.bad ? 'alert' : 'status'} className={`text-sm ${note.bad ? 'font-medium text-red-700' : 'text-gray-700'}`}>{note.text}</p>}
       </div>
     </Field>
   );
