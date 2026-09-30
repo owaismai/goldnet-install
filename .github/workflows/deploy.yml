@@ -37,8 +37,10 @@ jobs:
         env:
           BASE_PATH: ${{ vars.BASE_PATH || format('/{0}/', github.event.repository.name) }}
           VITE_WHATSAPP_NUMBER: ${{ vars.VITE_WHATSAPP_NUMBER || '27689197093' }}
-          # Public key for Google address search (restrict it to this site in Google Cloud). Empty = off.
-          VITE_GOOGLE_MAPS_API_KEY: ${{ vars.VITE_GOOGLE_MAPS_API_KEY }}
+          # Public browser key for Google address search (it is visible in the site's code by design; its
+          # protection is the website + API restrictions set in Google Cloud). A repository variable of the
+          # same name overrides this default.
+          VITE_GOOGLE_MAPS_API_KEY: ${{ vars.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyADQantlq-1WN3tMsGikJ_3jZkLg8jJ-r0' }}
 
       - uses: actions/configure-pages@v5
 

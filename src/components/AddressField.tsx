@@ -13,6 +13,8 @@ interface Props {
 const inputCls =
   'block w-full min-h-12 rounded-xl border border-gray-400 bg-white px-3 py-2.5 text-base text-gray-900 placeholder:text-gray-500 focus:border-brand';
 
+const UNAVAILABLE = 'Google address search is not available right now. Type the address or use your current location.';
+
 /**
  * Street address with Google Maps autofill: suggestions while typing (needs the Google key), and a
  * "Use my current location" button (phone GPS, no key). Typing the address by hand always works.
@@ -31,7 +33,8 @@ export default function AddressField({ value, error, onChange }: Props) {
 
   // Load Google only when the field is first used.
   const warm = () => {
-    if (googleEnabled && !places) loadPlaces().then((p) => p && setPlaces(p));
+    if (googleEnabled && !places)
+      loadPlaces().then((p) => (p ? setPlaces(p) : setNote(UNAVAILABLE)));
   };
 
   useEffect(() => {
@@ -54,7 +57,10 @@ export default function AddressField({ value, error, onChange }: Props) {
           setOpen(res.length > 0);
         }
       } catch {
-        if (mine === seq.current) setItems([]);
+        if (mine === seq.current) {
+          setItems([]);
+          setNote(UNAVAILABLE); // e.g. the Places API is not enabled for the key, or no internet
+        }
       }
     }, 250);
     return () => window.clearTimeout(t);
