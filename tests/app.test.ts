@@ -20,6 +20,7 @@ function complete(): FormState {
     routerSerial: 'ABC123456789', routerSerialSource: 'barcode', routerPhoto: true,
     signal: '62', speedtest: '48', clientType: 'New',
     photosTaken: { selected: ['CPE'], other: '' },
+    wifiName: 'Smith-Home', wifiPassword: 'P@ss w0rd&1',
     technician: 'Owais', comments: 'Installation completed successfully.',
   };
 }
@@ -64,6 +65,7 @@ test('message contains serials, sources and notes', () => {
   assert.match(m, /Model: Reyee 460G/);
   assert.match(m, /Cash Collected: Paid by EFT/);
   assert.match(m, /Signal: -62 dBm/);
+  assert.match(m, /Customer Wi-Fi:\nWi-Fi Name: Smith-Home\nWi-Fi Password: P@ss w0rd&1/);
   assert.match(m, /Technician:\nOwais/);
   assert.match(m, /Notes:\nInstallation completed successfully\./);
 });

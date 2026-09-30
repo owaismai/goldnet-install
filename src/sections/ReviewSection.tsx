@@ -136,6 +136,8 @@ export default function ReviewSection({ form, onEdit, onNew }: Props) {
           <Row k="Installation fee" v={choiceText(form.installFee)} />
           <Row k="Router" v={choiceText(form.routerSite)} />
           <Row k="Cash Collected" v={choiceText(form.cashCollected)} />
+          <Row k="Wi-Fi Name" v={form.wifiName} />
+          <Row k="Wi-Fi Password" v={form.wifiPassword} />
           <Row k="Signal" v={form.signal ? `-${form.signal} dBm` : ''} />
           <Row k="Speedtest" v={form.speedtest ? `${form.speedtest} mbps` : ''} />
           <Row k="Client" v={form.clientType} />

@@ -55,6 +55,10 @@ export function buildMessage(f: FormState): string {
     out.push('', 'WARNING: CPE and Router serial numbers are identical.');
   }
 
+  if (f.wifiName.trim() || f.wifiPassword.trim()) {
+    out.push('', 'Customer Wi-Fi:', line('Wi-Fi Name', f.wifiName.trim()), line('Wi-Fi Password', f.wifiPassword.trim()));
+  }
+
   if (f.cableFrom.trim() || f.cableTo.trim()) {
     out.push('', line('Cable used', `${f.cableFrom.trim() || '?'} to ${f.cableTo.trim() || '?'}`));
   }

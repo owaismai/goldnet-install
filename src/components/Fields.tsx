@@ -50,6 +50,8 @@ interface TextProps extends InputProps {
   type?: string;
   inputMode?: 'text' | 'numeric' | 'tel' | 'email' | 'decimal';
   autoComplete?: string;
+  autoCapitalize?: string;
+  spellCheck?: boolean;
   prefix?: string;
   suffix?: string;
   multiline?: boolean;
@@ -57,7 +59,7 @@ interface TextProps extends InputProps {
 }
 
 export function TextField({
-  label, required, hint, error, value, onChange, type = 'text', inputMode, autoComplete,
+  label, required, hint, error, value, onChange, type = 'text', inputMode, autoComplete, autoCapitalize, spellCheck,
   prefix, suffix, multiline, placeholder,
 }: TextProps) {
   const id = useId();
@@ -75,7 +77,7 @@ export function TextField({
       ) : (
         <div className="flex items-stretch gap-2">
           {prefix && <span className="flex items-center text-lg font-semibold text-gray-700">{prefix}</span>}
-          <input {...common} type={type} inputMode={inputMode} autoComplete={autoComplete} className={inputCls} />
+          <input {...common} type={type} inputMode={inputMode} autoComplete={autoComplete} autoCapitalize={autoCapitalize} spellCheck={spellCheck} className={inputCls} />
           {suffix && <span className="flex items-center text-gray-700">{suffix}</span>}
         </div>
       )}

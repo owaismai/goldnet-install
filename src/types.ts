@@ -37,6 +37,9 @@ export interface FormState {
   routerSerial: string;
   routerSerialSource: SerialSource;
   routerPhoto: boolean;
+  // Customer Wi-Fi (set up on the router)
+  wifiName: string;
+  wifiPassword: string;
   // Details of equipment / consumables
   cableFrom: string;
   cableTo: string;
@@ -78,6 +81,7 @@ export function emptyForm(): FormState {
     routerSite: noChoice(), cashCollected: noChoice(), cashReceipt: '', technician: '',
     cpeSerial: '', cpeSerialSource: null, cpePhoto: false,
     routerSerial: '', routerSerialSource: null, routerPhoto: false,
+    wifiName: '', wifiPassword: '',
     cableFrom: '', cableTo: '',
     signal: '', speedtest: '', clientType: '', photosTaken: noChoice(), rating: 0,
     comments: '', needMore: noChoice(),

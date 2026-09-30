@@ -14,6 +14,11 @@ export default function AdditionalInformationSection({ form, errors, update }: S
   return (
     <>
       <Card>
+        <SectionHeader>Customer Wi-Fi</SectionHeader>
+        <TextField label="Wi-Fi Name" hint="The network name (SSID) set on the customer's router" autoComplete="off" autoCapitalize="none" spellCheck={false} value={form.wifiName} onChange={(v) => update({ wifiName: v })} />
+        <TextField label="Wi-Fi Password" hint="Shown as typed so you can check it" autoComplete="off" autoCapitalize="none" spellCheck={false} value={form.wifiPassword} onChange={(v) => update({ wifiPassword: v })} />
+      </Card>
+      <Card>
         <SectionHeader>Details of Equipment/Consumables</SectionHeader>
         <TextField label="Cable used, From" inputMode="numeric" value={form.cableFrom} error={errors.cableFrom} onChange={(v) => update({ cableFrom: v })} />
         <TextField label="To" inputMode="numeric" value={form.cableTo} error={errors.cableTo} onChange={(v) => update({ cableTo: v })} />
