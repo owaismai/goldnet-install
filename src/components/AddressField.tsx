@@ -39,7 +39,12 @@ export default function AddressField({ value, location, error, onChange }: Props
 
   // Load Google only when the field is first used.
   const warm = () => {
-    if (googleEnabled && !places) loadPlaces().then((p) => (p ? setPlaces(p) : setNote({ text: UNAVAILABLE, bad: true })));
+    if (googleEnabled && !places) loadPlaces().then((p) => {
+        if (p) {
+          setPlaces(p);
+          setNote((n) => (n?.text === UNAVAILABLE ? null : n)); // it works now: drop the earlier warning
+        } else setNote({ text: UNAVAILABLE, bad: true });
+      });
   };
 
   useEffect(() => {

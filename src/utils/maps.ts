@@ -57,15 +57,27 @@ export function loadPlaces(): Promise<Places | null> {
     // With loading=async the script's onload fires BEFORE google.maps.importLibrary exists. Google calls the
     // `callback` function once the API is really ready, so wait for that instead.
     (window as unknown as Record<string, () => void>).__goldnetMapsReady = () => void finish();
-    const s = document.createElement('script');
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&loading=async&callback=__goldnetMapsReady&v=weekly&language=en&region=ZA`;
-    s.async = true;
-    s.onerror = () => {
-      loader = null; // offline now: allow a retry later
-      resolve(null);
+    // Mobile networks drop requests: retry the script up to 3 times before giving up.
+    const src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&loading=async&callback=__goldnetMapsReady&v=weekly&language=en&region=ZA`;
+    const load = (attempt: number) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.async = true;
+      s.onerror = () => {
+        s.remove();
+        if (attempt < 3) window.setTimeout(() => load(attempt + 1), 1200 * attempt);
+        else {
+          loader = null; // allow another try later (e.g. when back online)
+          resolve(null);
+        }
+      };
+      document.head.appendChild(s);
     };
-    document.head.appendChild(s);
-    window.setTimeout(() => resolve(null), 12000);
+    load(1);
+    window.setTimeout(() => {
+      loader = null;
+      resolve(null);
+    }, 25000);
   });
   return loader;
 }
