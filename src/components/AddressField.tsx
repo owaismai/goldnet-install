@@ -76,10 +76,19 @@ export default function AddressField({ value, location, error, onChange }: Props
   async function pick(s: Suggestion) {
     setOpen(false);
     setItems([]);
-    const r = await resolveSuggestion(s);
     token.current = null; // a new search session starts after each pick
-    skipValue.current = r.address;
-    latest.current.onChange(r.address, r.location);
+    // Fill straight away with the text of the suggestion (works even on a slow signal)...
+    skipValue.current = s.label;
+    latest.current.onChange(s.label, null);
+    // ...then upgrade it with Google's full address and the map pin when that reply arrives.
+    const r = await Promise.race([
+      resolveSuggestion(s),
+      new Promise<null>((res) => window.setTimeout(() => res(null), 10000)),
+    ]).catch(() => null);
+    if (r && latest.current.value === s.label) {
+      skipValue.current = r.address;
+      latest.current.onChange(r.address, r.location);
+    }
   }
 
   async function useMyLocation(auto = false) {
