@@ -54,10 +54,12 @@ export function loadPlaces(): Promise<Places | null> {
     };
     if (w.google?.maps?.importLibrary) return void finish();
     w.gm_authFailure = () => resolve(null); // key rejected / API not enabled
+    // With loading=async the script's onload fires BEFORE google.maps.importLibrary exists. Google calls the
+    // `callback` function once the API is really ready, so wait for that instead.
+    (window as unknown as Record<string, () => void>).__goldnetMapsReady = () => void finish();
     const s = document.createElement('script');
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&loading=async&v=weekly&language=en&region=ZA`;
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&loading=async&callback=__goldnetMapsReady&v=weekly&language=en&region=ZA`;
     s.async = true;
-    s.onload = () => void finish();
     s.onerror = () => {
       loader = null; // offline now: allow a retry later
       resolve(null);
