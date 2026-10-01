@@ -40,7 +40,7 @@ jobs:
           # Public browser key for Google address search (it is visible in the site's code by design; its
           # protection is the website + API restrictions set in Google Cloud). A repository variable of the
           # same name overrides this default.
-          VITE_GOOGLE_MAPS_API_KEY: ${{ vars.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyADQantlq-1WN3tMsGikJ_3jZkLg8jJ-r0' }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ vars.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyAKImCSO5r3HZ37OKPM6jge5cnZAf7XksA' }}
 
       - uses: actions/configure-pages@v5
 
