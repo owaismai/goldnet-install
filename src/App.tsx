@@ -19,7 +19,7 @@ function initial(): { form: FormState; step: StepId } {
     if (!(TECHNICIANS as readonly string[]).includes(saved.form.technician)) saved.form.technician = loadTechnician();
     return saved;
   }
-  return { form: { ...emptyForm(), technician: loadTechnician() }, step: 'customer' };
+  return { form: emptyForm(loadTechnician()), step: 'customer' };
 }
 
 export default function App() {
@@ -70,7 +70,7 @@ export default function App() {
     clearSaved();
     await clearPhotos();
     setAttempted(false);
-    setState({ form: { ...emptyForm(), technician: loadTechnician() }, step: 'customer' });
+    setState({ form: emptyForm(loadTechnician()), step: 'customer' });
     window.scrollTo({ top: 0 });
   }
 

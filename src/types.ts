@@ -4,12 +4,12 @@
 /** Installers shown in the Technician dropdown (required). */
 export const TECHNICIANS = ['Osama', 'Waathiq', 'Donnovan', 'Bashir', 'Team Osama'] as const;
 
-// Packages (Splynx tariffs 74, 71, 73 for Osama; 76, 74, 75, 71, 73 for Waathiq; names as on 5 Oct 2026).
+// Packages (Splynx tariffs 74, 71, 73 for Osama; 76, 75, 71, 73 for Waathiq, who does not sell the 20mbps NB Promo; names as on 5 Oct 2026).
 // Label = speed + short name + monthly price; the install bot matches the tariff by speed and price.
 export const DEFAULT_PACKAGE = '20mbps NB Promo - R350pm';
 const PACKAGES_OSAMA = [DEFAULT_PACKAGE, '50mbps Premium (Gold SLA) - R499pm', '100mbps Premium Business (Platinum SLA) - R2799pm'];
 const PACKAGES_WAATHIQ = [
-  '15mbps - R350pm', DEFAULT_PACKAGE, '25mbps Premium (Gold SLA) - R399pm',
+  '15mbps - R350pm', '25mbps Premium (Gold SLA) - R399pm',
   '50mbps Premium (Gold SLA) - R499pm', '100mbps Premium Business (Platinum SLA) - R2799pm',
 ];
 
@@ -99,12 +99,17 @@ function today(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-export function emptyForm(): FormState {
+/** The plan pre-selected for an installer: 20mbps R350 where it is offered (Osama's side), else nothing. */
+export function defaultServiceFor(technician: string): Choice {
+  return { selected: packagesFor(technician).includes(DEFAULT_PACKAGE) ? [DEFAULT_PACKAGE] : [], other: '' };
+}
+
+export function emptyForm(technician = ''): FormState {
   return {
     fullName: '', email: '', phone: '', idNumber: '', streetAddress: '', location: null,
     cpeModel: noChoice(), routerModel: noChoice(),
-    internetService: { selected: [DEFAULT_PACKAGE], other: '' }, startDate: today(), installFee: noChoice(),
-    routerSite: noChoice(), cashCollected: noChoice(), cashReceipt: '', technician: '',
+    internetService: defaultServiceFor(technician), startDate: today(), installFee: noChoice(),
+    routerSite: noChoice(), cashCollected: noChoice(), cashReceipt: '', technician,
     cpeSerial: '', cpeSerialSource: null, cpePhoto: false,
     routerSerial: '', routerSerialSource: null, routerPhoto: false,
     wifiName: '', wifiPassword: '',

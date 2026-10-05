@@ -1,5 +1,5 @@
 import { Card, ChoiceField, SectionHeader, SelectField, TextField } from '../components/Fields.tsx';
-import { DEFAULT_PACKAGE, OTHER, packagesFor, TECHNICIANS } from '../types.ts';
+import { defaultServiceFor, OTHER, packagesFor, TECHNICIANS } from '../types.ts';
 import type { SectionProps } from './types.ts';
 
 export const CPE_MODELS = ['Reyee 460G', 'Reyee 460F', 'Cambium 4525L'];
@@ -7,11 +7,12 @@ export const ROUTER_MODELS = ['Mikrotik HAP ac2', 'M1300 AC', 'M1200 AC', 'M3000
 
 export default function InstallationSection({ form, errors, update }: SectionProps) {
   const packages = packagesFor(form.technician);
-  // Changing installer changes the plans on offer: put a plan that is no longer offered back to the default.
+  // Changing installer changes the plans on offer: a plan that is not offered to the new one goes back to its default.
   const changeTechnician = (technician: string) => {
     const offered = packagesFor(technician);
-    const kept = form.internetService.selected.every((s) => s === OTHER || offered.includes(s));
-    update(kept ? { technician } : { technician, internetService: { selected: [DEFAULT_PACKAGE], other: '' } });
+    const { selected } = form.internetService;
+    const kept = selected.length > 0 && selected.every((s) => s === OTHER || offered.includes(s));
+    update(kept ? { technician } : { technician, internetService: defaultServiceFor(technician) });
   };
   return (
     <>
