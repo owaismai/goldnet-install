@@ -3,6 +3,11 @@ import { TECHNICIANS } from '../types.ts';
 import type { SectionProps } from './types.ts';
 
 export const CPE_MODELS = ['Reyee 460G', 'Reyee 460F', 'Cambium 4525L'];
+// Packages in use on the GOLDNET Osama / Waathiq networks (Splynx tariffs 76, 72, 74, 75, 71, 73; checked 5 Oct 2026).
+export const INTERNET_PACKAGES = [
+  '15mbps - R350pm', '20mbps Apartment Promo - R250pm', '20mbps - R350pm', '25mbps - R399pm',
+  '50mbps - R499pm', '100mbps Business Gold - R2799pm',
+];
 export const ROUTER_MODELS = ['Mikrotik HAP ac2', 'M1300 AC', 'M1200 AC', 'M3000 AX'];
 
 export default function InstallationSection({ form, errors, update }: SectionProps) {
@@ -31,7 +36,7 @@ export default function InstallationSection({ form, errors, update }: SectionPro
       <Card>
         <SectionHeader>Installation</SectionHeader>
         <ChoiceField
-          label="Internet Service:" required allowOther options={['20mbps - R350pm', '50mbps - R499pm']}
+          label="Internet Service:" required allowOther options={INTERNET_PACKAGES}
           value={form.internetService} error={errors.internetService} onChange={(v) => update({ internetService: v })}
         />
         <TextField label="Start Date" required type="date" value={form.startDate} error={errors.startDate} onChange={(v) => update({ startDate: v })} />
