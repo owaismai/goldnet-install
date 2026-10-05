@@ -1,18 +1,18 @@
 import { Card, ChoiceField, SectionHeader, SelectField, TextField } from '../components/Fields.tsx';
-import { TECHNICIANS } from '../types.ts';
+import { DEFAULT_PACKAGE, OTHER, packagesFor, TECHNICIANS } from '../types.ts';
 import type { SectionProps } from './types.ts';
 
 export const CPE_MODELS = ['Reyee 460G', 'Reyee 460F', 'Cambium 4525L'];
-// Packages in use on the GOLDNET Osama / Waathiq networks (Splynx tariffs 76, 72, 74, 75, 71, 73; names as on 5 Oct 2026).
-// Label = speed + short name + monthly price; the install bot matches the tariff by speed and price.
-export const INTERNET_PACKAGES = [
-  '15mbps - R350pm', '20mbps Apartment Promo - R250pm', '20mbps NB Promo - R350pm',
-  '25mbps Premium (Gold SLA) - R399pm', '50mbps Premium (Gold SLA) - R499pm',
-  '100mbps Premium Business (Platinum SLA) - R2799pm',
-];
 export const ROUTER_MODELS = ['Mikrotik HAP ac2', 'M1300 AC', 'M1200 AC', 'M3000 AX'];
 
 export default function InstallationSection({ form, errors, update }: SectionProps) {
+  const packages = packagesFor(form.technician);
+  // Changing installer changes the plans on offer: put a plan that is no longer offered back to the default.
+  const changeTechnician = (technician: string) => {
+    const offered = packagesFor(technician);
+    const kept = form.internetService.selected.every((s) => s === OTHER || offered.includes(s));
+    update(kept ? { technician } : { technician, internetService: { selected: [DEFAULT_PACKAGE], other: '' } });
+  };
   return (
     <>
       <Card>
@@ -20,7 +20,7 @@ export default function InstallationSection({ form, errors, update }: SectionPro
         <SelectField
           label="Technician" required options={TECHNICIANS} placeholder="Select your name…"
           hint="Remembered on this phone"
-          value={form.technician} error={errors.technician} onChange={(v) => update({ technician: v })}
+          value={form.technician} error={errors.technician} onChange={changeTechnician}
         />
       </Card>
       <Card>
@@ -38,7 +38,8 @@ export default function InstallationSection({ form, errors, update }: SectionPro
       <Card>
         <SectionHeader>Installation</SectionHeader>
         <ChoiceField
-          label="Internet Service:" required allowOther options={INTERNET_PACKAGES}
+          label="Internet Service:" required allowOther options={packages}
+          hint={packages.length ? undefined : 'Select the installer first to see the plans'}
           value={form.internetService} error={errors.internetService} onChange={(v) => update({ internetService: v })}
         />
         <TextField label="Start Date" required type="date" value={form.startDate} error={errors.startDate} onChange={(v) => update({ startDate: v })} />

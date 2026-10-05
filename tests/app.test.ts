@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyForm, OTHER } from '../src/types.ts';
+import { DEFAULT_PACKAGE, emptyForm, OTHER, packagesFor } from '../src/types.ts';
 import type { FormState } from '../src/types.ts';
 import { buildMessage, buildWhatsAppUrl } from '../src/utils/whatsapp.ts';
 import { serialsIdentical, validateAll, validateStep } from '../src/utils/validation.ts';
@@ -13,7 +13,7 @@ function complete(): FormState {
     fullName: 'John Smith', phone: '0821234567', streetAddress: '123 Example Street & Co',
     cpeModel: { selected: ['Reyee 460G'], other: '' },
     routerModel: { selected: ['M1300 AC'], other: '' },
-    internetService: { selected: ['20mbps - R350pm'], other: '' },
+    internetService: { selected: [DEFAULT_PACKAGE], other: '' },
     installFee: { selected: ['R250'], other: '' },
     routerSite: { selected: ['Sidwell'], other: '' },
     cashCollected: { selected: [OTHER], other: 'Paid by EFT' },
@@ -121,4 +121,27 @@ test('address formatting skips municipal ward labels', () => {
     formatNominatim({ address: { road: 'Sambane Crescent', suburb: 'eThekwini Ward 45', town: 'KwaMashu', postcode: '4360' } }),
     'Sambane Crescent, KwaMashu, 4360',
   );
+});
+
+test('20mbps R350 is the default plan on a new form', () => {
+  assert.deepEqual(emptyForm().internetService.selected, ['20mbps NB Promo - R350pm']);
+});
+
+test('plans follow the installer; the apartment plan is gone', () => {
+  const osama = packagesFor('Team Osama');
+  const waathiq = packagesFor('Waathiq');
+  assert.deepEqual(packagesFor('Osama'), osama);
+  assert.deepEqual(packagesFor('Bashir'), osama);
+  assert.deepEqual(packagesFor('Donnovan'), waathiq, 'Donnovan uses the same tariffs as Waathiq');
+  assert.deepEqual(osama, ['20mbps NB Promo - R350pm', '50mbps Premium (Gold SLA) - R499pm', '100mbps Premium Business (Platinum SLA) - R2799pm']);
+  assert.ok(waathiq.includes('15mbps - R350pm') && waathiq.includes('25mbps Premium (Gold SLA) - R399pm'));
+  assert.ok(!osama.includes('15mbps - R350pm') && !osama.some((p) => p.startsWith('25mbps')), 'Waathiq-only plans are hidden from Osama');
+  assert.deepEqual(packagesFor(''), []);
+  for (const p of [...osama, ...waathiq]) assert.ok(!/apartment/i.test(p), p);
+});
+
+test('a plan the installer is not offered is rejected', () => {
+  const f = { ...complete(), technician: 'Osama', internetService: { selected: ['25mbps Premium (Gold SLA) - R399pm'], other: '' } };
+  assert.ok(validateStep('installation', f).internetService);
+  assert.equal(validateStep('installation', { ...f, technician: 'Waathiq' }).internetService, undefined);
 });

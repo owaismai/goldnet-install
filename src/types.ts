@@ -4,6 +4,22 @@
 /** Installers shown in the Technician dropdown (required). */
 export const TECHNICIANS = ['Osama', 'Waathiq', 'Donnovan', 'Bashir', 'Team Osama'] as const;
 
+// Packages (Splynx tariffs 74, 71, 73 for Osama; 76, 74, 75, 71, 73 for Waathiq; names as on 5 Oct 2026).
+// Label = speed + short name + monthly price; the install bot matches the tariff by speed and price.
+export const DEFAULT_PACKAGE = '20mbps NB Promo - R350pm';
+const PACKAGES_OSAMA = [DEFAULT_PACKAGE, '50mbps Premium (Gold SLA) - R499pm', '100mbps Premium Business (Platinum SLA) - R2799pm'];
+const PACKAGES_WAATHIQ = [
+  '15mbps - R350pm', DEFAULT_PACKAGE, '25mbps Premium (Gold SLA) - R399pm',
+  '50mbps Premium (Gold SLA) - R499pm', '100mbps Premium Business (Platinum SLA) - R2799pm',
+];
+
+/** Packages for the chosen installer: Osama / Team Osama / Bashir sell Goldnet Osama's, Waathiq / Donnovan GOLDNET Waathiq's. */
+export function packagesFor(technician: string): string[] {
+  if (technician === 'Waathiq' || technician === 'Donnovan') return PACKAGES_WAATHIQ;
+  if (technician === 'Osama' || technician === 'Team Osama' || technician === 'Bashir') return PACKAGES_OSAMA;
+  return [];
+}
+
 export interface GeoPoint {
   lat: number;
   lng: number;
@@ -87,7 +103,7 @@ export function emptyForm(): FormState {
   return {
     fullName: '', email: '', phone: '', idNumber: '', streetAddress: '', location: null,
     cpeModel: noChoice(), routerModel: noChoice(),
-    internetService: noChoice(), startDate: today(), installFee: noChoice(),
+    internetService: { selected: [DEFAULT_PACKAGE], other: '' }, startDate: today(), installFee: noChoice(),
     routerSite: noChoice(), cashCollected: noChoice(), cashReceipt: '', technician: '',
     cpeSerial: '', cpeSerialSource: null, cpePhoto: false,
     routerSerial: '', routerSerialSource: null, routerPhoto: false,

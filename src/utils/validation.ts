@@ -1,5 +1,5 @@
 import type { FormState, StepId } from '../types.ts';
-import { OTHER, TECHNICIANS } from '../types.ts';
+import { OTHER, packagesFor, TECHNICIANS } from '../types.ts';
 
 export type Errors = Record<string, string>;
 
@@ -44,6 +44,10 @@ export function validateStep(step: StepId, f: FormState): Errors {
       needChoice('cpeModel', f.cpeModel);
       needChoice('routerModel', f.routerModel);
       needChoice('internetService', f.internetService);
+      // a plan not offered to this installer (e.g. from an older saved draft) must be picked again
+      if (!e.internetService && f.internetService.selected.some((x) => x !== OTHER && !packagesFor(f.technician).includes(x))) {
+        e.internetService = 'Please choose one of the plans offered';
+      }
       need('startDate', f.startDate);
       needChoice('installFee', f.installFee);
       needChoice('routerSite', f.routerSite);
