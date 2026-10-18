@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
-import { normaliseSerial } from '../utils/serial.ts';
+import { normaliseSerial, serialProblem } from '../utils/serial.ts';
+import type { SerialRule } from '../utils/serial.ts';
 import type { SerialSource } from '../types.ts';
 
 // zxing is large: load it only when the technician first opens the scanner (it is still precached for offline use).
@@ -7,6 +8,7 @@ const BarcodeScanner = lazy(() => import('./BarcodeScanner.tsx'));
 
 interface Props {
   label: string; // "CPE" | "Router"
+  rule: SerialRule;
   serial: string;
   source: SerialSource;
   onChange: (serial: string, source: SerialSource) => void;
@@ -14,7 +16,7 @@ interface Props {
 }
 
 /** Barcode-first serial number: SCAN -> auto-filled -> (SCAN AGAIN | Enter Manually). */
-export default function SerialNumberField({ label, serial, source, onChange, error }: Props) {
+export default function SerialNumberField({ label, rule, serial, source, onChange, error }: Props) {
   const [scanning, setScanning] = useState(false);
   const [manual, setManual] = useState(false);
   const [draft, setDraft] = useState('');
@@ -26,9 +28,10 @@ export default function SerialNumberField({ label, serial, source, onChange, err
     setManual(true);
   };
 
+  const manualProblem = serialProblem(draft, rule);
   const saveManual = () => {
     const v = normaliseSerial(draft);
-    if (!v) return;
+    if (!v || manualProblem) return;
     onChange(v, 'manual');
     setManual(false);
   };
@@ -52,11 +55,12 @@ export default function SerialNumberField({ label, serial, source, onChange, err
             spellCheck={false}
             className="block min-h-14 w-full rounded-xl border border-gray-400 px-3 font-mono text-lg"
           />
+          {manualProblem && <p role="alert" className="text-sm font-medium text-red-700">{manualProblem}</p>}
           <div className="flex gap-3">
             <button type="button" onClick={() => setManual(false)} className="min-h-14 flex-1 rounded-xl border-2 border-gray-400 bg-white text-lg font-semibold">
               Cancel
             </button>
-            <button type="button" onClick={saveManual} disabled={!normaliseSerial(draft)} className="min-h-14 flex-1 rounded-xl bg-brand text-lg font-bold text-white disabled:opacity-40">
+            <button type="button" onClick={saveManual} disabled={!normaliseSerial(draft) || !!manualProblem} className="min-h-14 flex-1 rounded-xl bg-brand text-lg font-bold text-white disabled:opacity-40">
               Save serial
             </button>
           </div>
@@ -95,6 +99,7 @@ export default function SerialNumberField({ label, serial, source, onChange, err
         <Suspense fallback={<div role="status" className="fixed inset-0 z-50 flex items-center justify-center bg-black text-white">Loading scanner…</div>}>
         <BarcodeScanner
           title={`SCAN ${upper} BARCODE`}
+          rule={rule}
           onResult={(value) => {
             onChange(value, 'barcode');
             setScanning(false);

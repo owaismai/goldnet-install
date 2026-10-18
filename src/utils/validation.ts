@@ -1,5 +1,6 @@
 import type { FormState, StepId } from '../types.ts';
 import { OTHER, packagesFor, TECHNICIANS } from '../types.ts';
+import { CPE_SERIAL, ROUTER_SERIAL, serialProblem } from './serial.ts';
 
 export type Errors = Record<string, string>;
 
@@ -9,6 +10,16 @@ function choiceMissing(c: { selected: string[]; other: string }): string | null 
   if (c.selected.length === 0) return 'Please choose an option';
   if (c.selected.includes(OTHER) && !c.other.trim()) return 'Please type the "Other" value';
   return null;
+}
+
+/**
+ * Why `phone` is not a South African number we can call and use as the PPPoE login, or null when it is:
+ * 10 digits starting with 0, or +27 / 27 and 9 digits. Spaces, dashes and brackets are ignored.
+ */
+export function phoneProblem(phone: string): string | null {
+  const d = phone.replace(/\D/g, '');
+  const ok = (d.length === 10 && d.startsWith('0')) || (d.length === 11 && d.startsWith('27'));
+  return ok ? null : 'Enter a valid South African number: 10 digits starting with 0 (e.g. 082 123 4567), or +27 and 9 digits';
 }
 
 export const DUPLICATE_WARNING =
@@ -33,7 +44,10 @@ export function validateStep(step: StepId, f: FormState): Errors {
     case 'customer':
       need('fullName', f.fullName);
       need('phone', f.phone);
-      if (f.phone.trim() && f.phone.replace(/\D/g, '').length < 9) e.phone = 'Enter a valid phone number';
+      if (f.phone.trim()) {
+        const p = phoneProblem(f.phone);
+        if (p) e.phone = p;
+      }
       if (f.email.trim() && !/^\S+@\S+\.\S+$/.test(f.email.trim())) e.email = 'Enter a valid email address';
       if (f.idNumber.trim() && !/^\d+$/.test(f.idNumber.trim())) e.idNumber = 'Digits only';
       need('streetAddress', f.streetAddress);
@@ -56,11 +70,19 @@ export function validateStep(step: StepId, f: FormState): Errors {
 
     case 'cpe':
       need('cpeSerial', f.cpeSerial, 'Scan the CPE barcode (or enter the serial manually)');
+      if (!e.cpeSerial) {
+        const p = serialProblem(f.cpeSerial, CPE_SERIAL);
+        if (p) e.cpeSerial = p;
+      }
       if (!f.cpePhoto) e.cpePhoto = 'Take and confirm the CPE photo';
       break;
 
     case 'router':
       need('routerSerial', f.routerSerial, 'Scan the router barcode (or enter the serial manually)');
+      if (!e.routerSerial) {
+        const p = serialProblem(f.routerSerial, ROUTER_SERIAL);
+        if (p) e.routerSerial = p;
+      }
       if (!f.routerPhoto) e.routerPhoto = 'Take and confirm the router photo';
       break;
 

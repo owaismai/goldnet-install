@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { createDetector, createWasmDetector, decodeImageFile } from '../utils/barcode.ts';
 import type { Detector } from '../utils/barcode.ts';
-import { normaliseSerial } from '../utils/serial.ts';
+import { normaliseSerial, serialProblem } from '../utils/serial.ts';
+import type { SerialRule } from '../utils/serial.ts';
+import type { Found } from '../utils/barcode.ts';
 import { describeCameraError } from '../utils/camera.ts';
 import type { CameraProblem } from '../utils/camera.ts';
 import { createStillGrabber, findFocusableCamera, listBackCameras, openStream, setFocus, setTorch, setZoom, stopStream, tapFocus, tuneTrack } from '../utils/scannerCamera.ts';
@@ -9,6 +11,8 @@ import type { Cam, TrackInfo } from '../utils/scannerCamera.ts';
 
 interface Props {
   title: string; // e.g. "SCAN CPE BARCODE"
+  /** Length rule for this equipment (CPE_SERIAL / ROUTER_SERIAL); other codes on the label are skipped. */
+  rule?: SerialRule;
   onResult: (value: string, format: string) => void;
   onCancel: () => void;
   onManual: () => void;
@@ -28,7 +32,7 @@ const FOCUS_METRES: Record<FocusPreset, number | null> = { auto: null, close: 0.
  * then stops the camera and closes. Small barcodes: continuous autofocus, tap-to-focus, zoom,
  * torch, camera switching, and a "scan from photo" fallback that uses the phone's camera app.
  */
-export default function BarcodeScanner({ title, onResult, onCancel, onManual }: Props) {
+export default function BarcodeScanner({ title, rule, onResult, onCancel, onManual }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const trackRef = useRef<MediaStreamTrack | null>(null);
@@ -53,6 +57,21 @@ export default function BarcodeScanner({ title, onResult, onCancel, onManual }: 
   const [busy, setBusy] = useState(false);
   const [assist, setAssist] = useState(false);
   const [focusPreset, setFocusPreset] = useState<FocusPreset>('auto');
+  const [skipped, setSkipped] = useState(''); // a code was read but it is not a serial (QR link, Wi-Fi code, MAC)
+
+  /** The first decoded code that can be a serial; remembers why the others were skipped. */
+  const pickSerial = (res: Found[]): Found | null => {
+    let why = '';
+    for (const r of res) {
+      const text = normaliseSerial(r.text);
+      if (!text) continue;
+      const bad = serialProblem(text, rule);
+      if (!bad) return { text, format: r.format };
+      why ||= bad;
+    }
+    if (why) setSkipped(why);
+    return null;
+  };
 
   const finish = (text: string, format: string) => {
     try {
@@ -76,6 +95,7 @@ export default function BarcodeScanner({ title, onResult, onCancel, onManual }: 
     let count = 0;
     setProblem(null);
     setStarting(true);
+    setSkipped('');
     setTorchOn(false);
     setAssist(false);
     setFocusPreset('auto');
@@ -122,18 +142,17 @@ export default function BarcodeScanner({ title, onResult, onCancel, onManual }: 
           if (cancelled || done) return;
           if (video.readyState >= 2 && video.videoWidth > 0) {
             try {
-              const res = await det.detect(video);
-              const text = res.length ? normaliseSerial(res[0].text) : '';
-              if (text) {
-                if (text === last) count += 1;
+              const hit = pickSerial(await det.detect(video));
+              if (hit) {
+                if (hit.text === last) count += 1;
                 else {
-                  last = text;
+                  last = hit.text;
                   count = 1;
                 }
                 if (count >= CONFIRM_READS) {
                   done = true;
                   stopStream(streamRef.current); // close the camera straight away
-                  finish(text, res[0].format);
+                  finish(hit.text, hit.format);
                   return;
                 }
               }
@@ -157,11 +176,11 @@ export default function BarcodeScanner({ title, onResult, onCancel, onManual }: 
                 const blob = await grab();
                 if (cancelled || done) break;
                 const r = await decodeImageFile(blob, { tiles: false });
-                const text = r ? normaliseSerial(r.text) : '';
-                if (r && text && !done && !cancelled) {
+                const hit = r ? pickSerial([r]) : null;
+                if (hit && !done && !cancelled) {
                   done = true;
                   stopStream(streamRef.current);
-                  finish(text, r.format);
+                  finish(hit.text, hit.format);
                   break;
                 }
               } catch {
@@ -250,7 +269,9 @@ export default function BarcodeScanner({ title, onResult, onCancel, onManual }: 
       const res = await decodeImageFile(file);
       if (res) {
         const text = normaliseSerial(res.text);
-        if (text) return finish(text, res.format);
+        const bad = text ? serialProblem(text, rule) : null;
+        if (text && !bad) return finish(text, res.format);
+        if (bad) return setPhotoMsg(bad);
       }
       setPhotoMsg('No barcode found in that photo. Get closer, keep the barcode sharp and flat, avoid glare, then try again.');
     } catch {
@@ -334,6 +355,9 @@ export default function BarcodeScanner({ title, onResult, onCancel, onManual }: 
                 Hold the phone 10-20 cm away and <strong>tap the barcode to focus</strong>.
                 {zoomLevels.length > 1 ? ' Tiny barcode? Hold it further back and use zoom.' : ' Tiny barcode? Use "Scan from photo".'}
               </p>
+            )}
+            {!found && skipped && (
+              <p role="status" className="text-sm font-semibold text-amber-300">{skipped}</p>
             )}
             {!found && assist && (
               <p role="status" className="text-sm font-semibold text-amber-300">
