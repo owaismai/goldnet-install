@@ -54,3 +54,12 @@ The Technician dropdown (required, remembered on the phone) is the `TECHNICIANS`
   capabilities, useful when reporting a problem.
 - Photos: a wa.me link can carry only text, so after the message opens, the photos are sent through the phone's
   share sheet (Web Share API with files) into the same WhatsApp chat. Browsers without file sharing get Save links.
+
+## Sending straight to GOLDNET (25 Oct 2026)
+
+When the phone has the installer's own form link (`https://owaismai.github.io/goldnet-install/#key=gif_...`, made in GOLDNET ISP
+Manager under Scheduling > Installation forms), SUBMIT posts the form and the CPE/router photos to the panel (`VITE_PANEL_URL`,
+default https://isp.vcom.co.za, `src/utils/panel.ts`). The panel keeps them and hands them to the team bot, which sets the customer
+up in Splynx exactly as for a WhatsApp form, answers the installer on WhatsApp, and posts the form and photos to the New
+installations group. No key, or the panel can't be reached: the WhatsApp way (open WhatsApp, share the photos) still works.
+The message sent is the same labelled text, so keep the labels the bot reads (`Serial Number:`, `Wi-Fi Name:` ...).

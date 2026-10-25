@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Card, SectionHeader } from '../components/Fields.tsx';
 import { choiceText, STEPS } from '../types.ts';
@@ -7,6 +7,10 @@ import { DUPLICATE_WARNING, serialsIdentical, validateAll } from '../utils/valid
 import { buildMessage, buildWhatsAppUrl } from '../utils/whatsapp.ts';
 import { WHATSAPP_NUMBER } from '../config.ts';
 import PhotoShare from '../components/PhotoShare.tsx';
+import { forgetKey, formUid, loadKey, panelBody, sendToPanel, whoAmI } from '../utils/panel.ts';
+import type { PanelAnswer, PanelPhoto } from '../utils/panel.ts';
+import { loadPhoto } from '../utils/photoStore.ts';
+import { photoFileName } from '../utils/photos.ts';
 
 interface Props {
   form: FormState;
@@ -36,10 +40,23 @@ function Equip({ name, serial, source, photo, model }: { name: string; serial: s
   );
 }
 
-type Phase = 'review' | 'sent';
+type Phase = 'review' | 'sending' | 'panel' | 'sent';
+
+async function photosOf(form: FormState): Promise<PanelPhoto[]> {
+  const out: PanelPhoto[] = [];
+  const cpe = await loadPhoto('cpe');
+  if (cpe) out.push({ field: 'cpe_photo', file: cpe, name: photoFileName('CPE', form.cpeSerial) });
+  const router = await loadPhoto('router');
+  if (router) out.push({ field: 'router_photo', file: router, name: photoFileName('Router', form.routerSerial) });
+  return out;
+}
 
 export default function ReviewSection({ form, onEdit, onNew }: Props) {
   const [phase, setPhase] = useState<Phase>('review');
+  const [key, setKey] = useState(loadKey);
+  const [sender, setSender] = useState('');
+  const [answer, setAnswer] = useState<PanelAnswer | null>(null);
+  const [panelError, setPanelError] = useState('');
   const [showFallback, setShowFallback] = useState(false);
   const [copied, setCopied] = useState(false);
   const problems = validateAll(form);
@@ -61,10 +78,73 @@ export default function ReviewSection({ form, onEdit, onNew }: Props) {
     }, 3000);
   }
 
-  function submit() {
-    if (missing.length) return;
+  // who this phone sends as; a key the office turned off falls back to WhatsApp
+  useEffect(() => {
+    if (!key) return;
+    let alive = true;
+    whoAmI(key).then((name) => {
+      if (!alive) return;
+      if (name === null) {
+        forgetKey();
+        setKey('');
+      } else setSender(name);
+    }, () => { /* offline: tried again on SUBMIT */ });
+    return () => {
+      alive = false;
+    };
+  }, [key]);
+
+  function sendByWhatsApp() {
     setPhase('sent');
     openWhatsApp();
+  }
+
+  async function submit() {
+    if (missing.length) return;
+    if (!key) return sendByWhatsApp();
+    setPanelError('');
+    setPhase('sending');
+    try {
+      const body = panelBody(formUid(), message, form, await photosOf(form));
+      setAnswer(await sendToPanel(key, body));
+      setPhase('panel');
+    } catch (e) {
+      const err = e as Error & { status?: number };
+      if (err.status === 401) {
+        forgetKey();
+        setKey('');
+      }
+      setPanelError(err.message === 'Failed to fetch' || err.message.startsWith('NetworkError') ? 'No connection to the panel.' : err.message);
+      setPhase('review');
+    }
+  }
+
+  if (phase === 'sending') {
+    return (
+      <Card>
+        <p role="status" className="text-2xl font-bold">Sending to GOLDNET…</p>
+        <p className="text-base text-gray-700">Uploading the form and photos. Keep this screen open.</p>
+      </Card>
+    );
+  }
+
+  if (phase === 'panel' && answer) {
+    const ok = answer.status !== 'refused';
+    return (
+      <Card>
+        <p role="status" className={`text-2xl font-bold ${ok ? 'text-green-800' : 'text-red-700'}`}>{ok ? '✓ INSTALLATION SENT' : '✗ NOT ACCEPTED'}</p>
+        <p className="text-lg">{answer.message}</p>
+        <p className="text-sm text-gray-600">Panel number #{answer.id}. The photos went with the form: no need to send them on WhatsApp.</p>
+        {!ok && (
+          <button type="button" onClick={sendByWhatsApp} className="min-h-14 w-full rounded-xl border-2 border-green-600 bg-white text-lg font-bold text-green-800">
+            Send by WhatsApp instead
+          </button>
+        )}
+        <button type="button" onClick={onNew} className="min-h-14 w-full rounded-xl bg-brand text-lg font-bold text-white">
+          Start a new installation
+        </button>
+      </Card>
+    );
   }
 
   async function copy() {
@@ -167,21 +247,39 @@ export default function ReviewSection({ form, onEdit, onNew }: Props) {
         </div>
       )}
 
+      {panelError && (
+        <div role="alert" className="space-y-2 rounded-2xl border border-red-300 bg-red-50 p-4">
+          <p className="font-bold text-red-800">Not sent: {panelError}</p>
+          <p className="text-sm text-gray-800">Your answers and photos are still on this phone. Try again, or send it by WhatsApp.</p>
+          <button type="button" onClick={sendByWhatsApp} className="min-h-12 w-full rounded-xl border-2 border-green-600 bg-white text-base font-bold text-green-800">
+            Send by WhatsApp instead
+          </button>
+        </div>
+      )}
       <button
         type="button" onClick={submit} disabled={missing.length > 0}
         className="min-h-16 w-full rounded-xl bg-green-600 text-lg font-bold text-white shadow disabled:bg-gray-400"
       >
         SUBMIT INSTALLATION
       </button>
-      {missing.length === 0 && (
-        <Card>
-          <SectionHeader>Photos</SectionHeader>
-          <PhotoShare customer={form.fullName} cpeSerial={form.cpeSerial} routerSerial={form.routerSerial} />
-        </Card>
+      {key ? (
+        <p className="text-center text-sm text-gray-600">
+          Sends the form and photos straight to GOLDNET{sender ? ` as ${sender}` : ''}. The bot then WhatsApps you the results, as before.
+        </p>
+      ) : (
+        <>
+          {missing.length === 0 && (
+            <Card>
+              <SectionHeader>Photos</SectionHeader>
+              <PhotoShare customer={form.fullName} cpeSerial={form.cpeSerial} routerSerial={form.routerSerial} />
+            </Card>
+          )}
+          <p className="text-center text-sm text-gray-600">
+            This opens WhatsApp with the details ready to send to +{WHATSAPP_NUMBER}. You then press Send in WhatsApp. The next screen lets you send the photos too.
+            To send straight to GOLDNET instead, ask the office for your own form link.
+          </p>
+        </>
       )}
-      <p className="text-center text-sm text-gray-600">
-        This opens WhatsApp with the details ready to send to +{WHATSAPP_NUMBER}. You then press Send in WhatsApp. The next screen lets you send the photos too.
-      </p>
     </div>
   );
 }
