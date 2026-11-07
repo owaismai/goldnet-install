@@ -11,8 +11,19 @@ import type { FormState, StepId } from './types.ts';
 import { validateStep } from './utils/validation.ts';
 import { clearSaved, loadSaved, loadTechnician, save, saveTechnician } from './utils/storage.ts';
 import { clearPhotos } from './utils/photoStore.ts';
+import { applyPrefill, hasPrefill } from './utils/prefill.ts';
 
 function initial(): { form: FormState; step: StepId } {
+  const st = initialState();
+  // values from the GOLDNET Radio app (utils/prefill.ts), read once and taken off the address
+  if (hasPrefill(window.location.search)) {
+    st.form = applyPrefill(st.form, window.location.search);
+    history.replaceState(null, '', window.location.pathname + window.location.hash);
+  }
+  return st;
+}
+
+function initialState(): { form: FormState; step: StepId } {
   const saved = loadSaved();
   if (saved) {
     // a draft from before the dropdown may hold a free-text name: fall back to the remembered choice
