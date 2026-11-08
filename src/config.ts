@@ -13,4 +13,10 @@ export const WHATSAPP_NUMBER = raw.replace(/\D/g, '');
  */
 export const GOOGLE_MAPS_API_KEY = ((import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ?? '').trim();
 
+/**
+ * GOLDNET ISP Manager: SUBMIT sends the form and photos here (utils/panel.ts). Public by design; the installer's own
+ * form key (from their link) is what lets a form in.
+ */
+export const PANEL_URL = ((import.meta.env.VITE_PANEL_URL as string | undefined) ?? 'https://isp.vcom.co.za').trim();
+
 export const APP_NAME = 'GOLDNET Installation';

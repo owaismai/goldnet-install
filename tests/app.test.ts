@@ -151,3 +151,28 @@ test('a plan the installer is not offered is rejected', () => {
   assert.equal(validateStep('installation', nb).internetService, undefined);
   assert.ok(validateStep('installation', { ...nb, technician: 'Waathiq' }).internetService, 'a 20mbps NB draft is rejected once the installer is Waathiq');
 });
+
+// --- sending straight to GOLDNET ISP Manager (25 Oct 2026) ---
+import { keyFromHash, panelBody } from '../src/utils/panelForm.ts';
+
+test('the installer key comes only from a #key=gif_... link', () => {
+  const key = 'gif_' + 'A'.repeat(32);
+  assert.equal(keyFromHash(`#key=${key}`), key);
+  assert.equal(keyFromHash(`#x=1&key=${encodeURIComponent(key)}`), key);
+  assert.equal(keyFromHash('#key=notakey'), '');
+  assert.equal(keyFromHash(''), '');
+});
+
+test('the panel gets the same labelled message the bot reads, the fields and the photos', async () => {
+  const f = complete();
+  const msg = buildMessage(f);
+  const body = panelBody('uid-12345678', msg, f, [{ field: 'cpe_photo', file: new Blob(['jpg'], { type: 'image/jpeg' }), name: 'CPE-4859301847291.jpg' }]);
+  const form = JSON.parse(String(body.get('form')));
+  assert.equal(form.uid, 'uid-12345678');
+  assert.ok(form.message.startsWith('NEW GOLDNET INSTALLATION'));
+  assert.ok(form.message.includes('Serial Number: 4859301847291') && form.message.includes('Wi-Fi Name: Smith-Home'));
+  assert.equal(form.fields.cpeSerial, '4859301847291');
+  const photo = body.get('cpe_photo') as File;
+  assert.equal(photo.name, 'CPE-4859301847291.jpg');
+  assert.equal(await photo.text(), 'jpg');
+});

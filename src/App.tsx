@@ -12,6 +12,7 @@ import { validateStep } from './utils/validation.ts';
 import { clearSaved, loadSaved, loadTechnician, save, saveTechnician } from './utils/storage.ts';
 import { clearPhotos } from './utils/photoStore.ts';
 import { applyPrefill, hasPrefill } from './utils/prefill.ts';
+import { clearUid } from './utils/panel.ts';
 
 function initial(): { form: FormState; step: StepId } {
   const st = initialState();
@@ -79,6 +80,7 @@ export default function App() {
 
   async function startNew() {
     clearSaved();
+    clearUid();
     await clearPhotos();
     setAttempted(false);
     setState({ form: emptyForm(loadTechnician()), step: 'customer' });
@@ -97,7 +99,7 @@ export default function App() {
         <ProgressIndicator current={index} onJump={(i) => goto(STEPS[i].id)} />
         {!online && (
           <p role="status" className="bg-amber-100 px-4 py-1.5 text-center text-sm text-amber-900">
-            You are offline. You can fill in the form, but WhatsApp needs a connection to send.
+            You are offline. You can fill in the form, but sending it needs a connection.
           </p>
         )}
       </header>
