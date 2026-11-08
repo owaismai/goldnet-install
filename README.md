@@ -1,7 +1,8 @@
 # GOLDNET Installation Form (static PWA)
 
-Mobile-first technician form: React + TypeScript + Vite + Tailwind + PWA, barcode scanning with `@zxing/browser`.
-No backend: it is a fully static site (GitHub Pages). Submitting opens WhatsApp with the message pre-filled
+Mobile-first technician form: React + TypeScript + Vite + Tailwind + PWA, barcode scanning with the phone's Barcode Detection API or `zxing-wasm` (see Notes).
+A static site (GitHub Pages). With the installer's `#key=` link SUBMIT posts to GOLDNET ISP Manager (see "Sending straight to
+GOLDNET" below); without one, submitting opens WhatsApp with the message pre-filled
 (click-to-chat to `27689197093`); the technician presses Send.
 
 Part of the GOLDNET tools. Modelled on the WhatsForm "Osama Customer Details" form (https://whatsform.com/g8ztfa): same fields, wording and
@@ -25,7 +26,8 @@ The number is baked into the public bundle: it is **not secret**.
 ## Address autofill (Google Maps)
 - **Use my current location** always works: phone GPS + OpenStreetMap reverse geocoding (no key). It also adds a
   Google Maps pin link to the WhatsApp message.
-- **Google address search while typing** needs a Google Maps key (the app ships with it switched off):
+- **Google address search while typing** needs a Google Maps key (empty = off; the deploy workflow currently falls back to a
+  key written into `.github/workflows/deploy.yml`: set the repo Variable instead and remove that fallback):
   1. console.cloud.google.com: create/select a project and attach a billing account (Google's monthly free credit
      covers this usage).
   2. APIs & Services > Library: enable **Maps JavaScript API** and **Places API (New)**.
