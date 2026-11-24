@@ -15,8 +15,8 @@ export default function AdditionalInformationSection({ form, errors, update }: S
     <>
       <Card>
         <SectionHeader>Customer Wi-Fi</SectionHeader>
-        <TextField label="Wi-Fi Name" hint="The network name (SSID) set on the customer's router" autoComplete="off" autoCapitalize="none" spellCheck={false} value={form.wifiName} onChange={(v) => update({ wifiName: v })} />
-        <TextField label="Wi-Fi Password" hint="Shown as typed so you can check it" autoComplete="off" autoCapitalize="none" spellCheck={false} value={form.wifiPassword} onChange={(v) => update({ wifiPassword: v })} />
+        <TextField label="Wi-Fi Name" required hint="The network name (SSID) set on the customer's router. The customer gets it in their welcome WhatsApp once online" error={errors.wifiName} autoComplete="off" autoCapitalize="none" spellCheck={false} value={form.wifiName} onChange={(v) => update({ wifiName: v })} />
+        <TextField label="Wi-Fi Password" required hint="At least 8 characters, shown as typed so you can check it. Sent to the customer in their welcome WhatsApp" error={errors.wifiPassword} autoComplete="off" autoCapitalize="none" spellCheck={false} value={form.wifiPassword} onChange={(v) => update({ wifiPassword: v })} />
       </Card>
       <Card>
         <SectionHeader>Details of Equipment/Consumables</SectionHeader>

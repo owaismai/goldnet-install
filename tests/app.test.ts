@@ -151,3 +151,10 @@ test('a plan the installer is not offered is rejected', () => {
   assert.equal(validateStep('installation', nb).internetService, undefined);
   assert.ok(validateStep('installation', { ...nb, technician: 'Waathiq' }).internetService, 'a 20mbps NB draft is rejected once the installer is Waathiq');
 });
+
+test('Wi-Fi name and password are required (the customer gets them in the welcome WhatsApp)', () => {
+  const e = validateStep('additional', { ...complete(), wifiName: ' ', wifiPassword: '' });
+  assert.ok(e.wifiName && e.wifiPassword);
+  assert.equal(validateStep('additional', { ...complete(), wifiPassword: 'short' }).wifiPassword, 'At least 8 characters');
+  assert.deepEqual(validateStep('additional', complete()), {});
+});

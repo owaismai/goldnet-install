@@ -65,6 +65,10 @@ export function validateStep(step: StepId, f: FormState): Errors {
       break;
 
     case 'additional':
+      // the bot WhatsApps both to the customer in their welcome message once they are online (24 Nov 2026)
+      need('wifiName', f.wifiName);
+      need('wifiPassword', f.wifiPassword);
+      if (f.wifiPassword.trim() && f.wifiPassword.trim().length < 8) e.wifiPassword = 'At least 8 characters';
       if (f.cableFrom.trim() && !/^\d+$/.test(f.cableFrom.trim())) e.cableFrom = 'Digits only';
       if (f.cableTo.trim() && !/^\d+$/.test(f.cableTo.trim())) e.cableTo = 'Digits only';
       need('signal', f.signal);
