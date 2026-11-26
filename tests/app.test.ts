@@ -158,3 +158,23 @@ test('Wi-Fi name and password are required (the customer gets them in the welcom
   assert.equal(validateStep('additional', { ...complete(), wifiPassword: 'short' }).wifiPassword, 'At least 8 characters');
   assert.deepEqual(validateStep('additional', complete()), {});
 });
+
+test('customer cell number: any way it is typed becomes 0XXXXXXXXX, wrong lengths are refused', async () => {
+  const { normalizeCell, tidyCell, cellError } = await import('../src/utils/phone.ts');
+  for (const raw of ['0681746016', '+27681746016', '068 174 6016', '27681746016', '+27 68 174 6016', '0027681746016', '681746016', '068-174-6016'])
+    assert.equal(normalizeCell(raw), '0681746016', raw);
+  assert.equal(tidyCell('+27681746016'), '068 174 6016');
+  assert.equal(tidyCell('06817'), '06817'); // left alone while typing
+  assert.equal(normalizeCell('068663193'), null); // 9 digits starting 0: one is missing
+  assert.match(cellError('068663193') ?? '', /9 digits/);
+  assert.match(cellError('06816601234') ?? '', /11 digits/);
+  assert.match(cellError('0215551234') ?? '', /06, 07 or 08/);
+  assert.match(cellError('') ?? '', /required/);
+  assert.equal(cellError('068 174 6016'), null);
+});
+
+test('the message carries the cell as 10 plain digits and validation needs a full number', () => {
+  assert.match(buildMessage({ ...complete(), phone: '+27 82 123 4567' }), /Contact:\n0821234567\n/);
+  assert.ok(validateStep('customer', { ...complete(), phone: '082123456' }).phone);
+  assert.equal(validateStep('customer', { ...complete(), phone: '27821234567' }).phone, undefined);
+});

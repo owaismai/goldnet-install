@@ -1,5 +1,6 @@
 import type { FormState, StepId } from '../types.ts';
 import { OTHER, packagesFor, TECHNICIANS } from '../types.ts';
+import { cellError } from './phone.ts';
 
 export type Errors = Record<string, string>;
 
@@ -32,8 +33,7 @@ export function validateStep(step: StepId, f: FormState): Errors {
   switch (step) {
     case 'customer':
       need('fullName', f.fullName);
-      need('phone', f.phone);
-      if (f.phone.trim() && f.phone.replace(/\D/g, '').length < 9) e.phone = 'Enter a valid phone number';
+      { const pe = cellError(f.phone); if (pe) e.phone = pe; } // the bot WhatsApps the customer's welcome to it
       if (f.email.trim() && !/^\S+@\S+\.\S+$/.test(f.email.trim())) e.email = 'Enter a valid email address';
       if (f.idNumber.trim() && !/^\d+$/.test(f.idNumber.trim())) e.idNumber = 'Digits only';
       need('streetAddress', f.streetAddress);

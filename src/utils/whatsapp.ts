@@ -7,6 +7,7 @@
 // backend/storage service in a future version.
 
 import type { FormState } from '../types.ts';
+import { normalizeCell } from './phone.ts';
 import { choiceText } from '../types.ts';
 import { mapsLink } from './address.ts';
 
@@ -24,7 +25,7 @@ export function buildMessage(f: FormState): string {
     'Customer:',
     f.fullName.trim(),
     'Contact:',
-    f.phone.trim(),
+    normalizeCell(f.phone) ?? f.phone.trim(),
     ...(f.email.trim() ? ['Email:', f.email.trim()] : []),
     ...(f.idNumber.trim() ? ['ID Number:', f.idNumber.trim()] : []),
     'Address:',
