@@ -1,6 +1,6 @@
 # GOLDNET Installation Form (static PWA)
 
-Mobile-first technician form: React + TypeScript + Vite + Tailwind + PWA, barcode scanning with `@zxing/browser`.
+Mobile-first technician form: React + TypeScript + Vite + Tailwind + PWA, barcode scanning with the phone's Barcode Detection API or `zxing-wasm` (via `barcode-detector`; see Notes).
 No backend: it is a fully static site (GitHub Pages). Submitting opens WhatsApp with the message pre-filled
 (click-to-chat to `27689197093`); the technician presses Send.
 
@@ -25,7 +25,9 @@ The number is baked into the public bundle: it is **not secret**.
 ## Address autofill (Google Maps)
 - **Use my current location** always works: phone GPS + OpenStreetMap reverse geocoding (no key). It also adds a
   Google Maps pin link to the WhatsApp message.
-- **Google address search while typing** needs a Google Maps key (the app ships with it switched off):
+- **Google address search while typing** needs a Google Maps key (empty = off). The deploy workflow uses the repo Variable `VITE_GOOGLE_MAPS_API_KEY`
+  when set, else a fallback key written into `.github/workflows/deploy.yml`, so the live app ships with it on. Prefer
+  the Variable (and then remove the fallback):
   1. console.cloud.google.com: create/select a project and attach a billing account (Google's monthly free credit
      covers this usage).
   2. APIs & Services > Library: enable **Maps JavaScript API** and **Places API (New)**.
