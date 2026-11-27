@@ -1,6 +1,7 @@
 import type { FormState, StepId } from '../types.ts';
 import { OTHER, packagesFor, TECHNICIANS } from '../types.ts';
 import { cellError } from './phone.ts';
+import { CPE_SERIAL, ROUTER_SERIAL, serialProblem } from './serial.ts';
 
 export type Errors = Record<string, string>;
 
@@ -56,11 +57,14 @@ export function validateStep(step: StepId, f: FormState): Errors {
 
     case 'cpe':
       need('cpeSerial', f.cpeSerial, 'Scan the CPE barcode (or enter the serial manually)');
+      // a link, Wi-Fi QR, MAC or wrong length would reach the bot as the serial (27 Nov 2026: a Reyee QR link)
+      if (!e.cpeSerial) { const p = serialProblem(f.cpeSerial, CPE_SERIAL); if (p) e.cpeSerial = p; }
       if (!f.cpePhoto) e.cpePhoto = 'Take and confirm the CPE photo';
       break;
 
     case 'router':
       need('routerSerial', f.routerSerial, 'Scan the router barcode (or enter the serial manually)');
+      if (!e.routerSerial) { const p = serialProblem(f.routerSerial, ROUTER_SERIAL); if (p) e.routerSerial = p; }
       if (!f.routerPhoto) e.routerPhoto = 'Take and confirm the router photo';
       break;
 
