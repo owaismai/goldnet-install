@@ -83,6 +83,14 @@ test('WhatsApp URL: recipient 27689197093, correctly encoded, round-trips', () =
   assert.equal(new URL(url).searchParams.get('text'), msg);
 });
 
+test('normaliseSerial takes the serial out of a Ruijie/Reyee QR link', () => {
+  assert.equal(normaliseSerial('http://rj.link/e?s=G1TD4VE00986C&d=RG-AirMetro460F&m=C0A476CEB195'), 'G1TD4VE00986C');
+  assert.equal(normaliseSerial('HTTP://RJ.LINK/E?S=G1TD4VE00986C&D=RG-AIRMETRO460F&M=C0A476CEB195\n'), 'G1TD4VE00986C');
+  assert.equal(normaliseSerial('rj.link/e?s=G1TD4VE00986C'), 'G1TD4VE00986C');
+  assert.equal(normaliseSerial('https://example.com/x?sn=ABC123'), 'ABC123');
+  assert.equal(normaliseSerial('https://example.com/page?id=7'), 'https://example.com/page?id=7');
+});
+
 test('normaliseSerial strips whitespace and control chars only', () => {
   assert.equal(normaliseSerial('  G1UH44N009260\r\n'), 'G1UH44N009260');
 });

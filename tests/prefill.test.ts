@@ -33,3 +33,8 @@ test('no parameters: nothing to apply', () => {
   assert.equal(hasPrefill('?cpe=X'), true);
   assert.deepEqual(applyPrefill(emptyForm(), ''), emptyForm());
 });
+
+test('a QR link passed as cpe gives just the serial', () => {
+  const f = applyPrefill(emptyForm('Osama'), '?cpe=' + encodeURIComponent('http://rj.link/e?s=G1TD4VE00986C&d=RG-AirMetro460F&m=C0A476CEB195'));
+  assert.equal(f.cpeSerial, 'G1TD4VE00986C');
+});

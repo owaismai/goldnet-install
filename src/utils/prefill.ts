@@ -10,6 +10,7 @@
 // reload doesn't apply it twice.
 import { OTHER } from '../types.ts';
 import type { Choice, FormState } from '../types.ts';
+import { normaliseSerial } from './serial.ts';
 
 const MODEL_MATCH: [RegExp, string][] = [[/460\s*G/i, 'Reyee 460G'], [/460\s*F/i, 'Reyee 460F'], [/4525\s*L/i, 'Cambium 4525L']];
 
@@ -27,7 +28,7 @@ export function hasPrefill(search: string): boolean {
 export function applyPrefill(form: FormState, search: string): FormState {
   const q = new URLSearchParams(search);
   const out: FormState = { ...form };
-  const cpe = (q.get('cpe') || '').trim();
+  const cpe = normaliseSerial(q.get('cpe') || '');
   if (cpe) { out.cpeSerial = cpe.slice(0, 40); out.cpeSerialSource = 'manual'; }
   const model = (q.get('cpe_model') || '').trim();
   if (model) out.cpeModel = modelChoice(model, form.cpeModel);
