@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
-import { normaliseSerial } from '../utils/serial.ts';
+import { normaliseSerial, serialProblem, type SerialRule } from '../utils/serial.ts';
 import type { SerialSource } from '../types.ts';
 
 // zxing is large: load it only when the technician first opens the scanner (it is still precached for offline use).
@@ -11,10 +11,12 @@ interface Props {
   source: SerialSource;
   onChange: (serial: string, source: SerialSource) => void;
   error?: string;
+  /** Length rule for this serial: a typed value that breaks it is refused before it is saved. */
+  rule?: SerialRule;
 }
 
 /** Barcode-first serial number: SCAN -> auto-filled -> (SCAN AGAIN | Enter Manually). */
-export default function SerialNumberField({ label, serial, source, onChange, error }: Props) {
+export default function SerialNumberField({ label, serial, source, onChange, error, rule }: Props) {
   const [scanning, setScanning] = useState(false);
   const [manual, setManual] = useState(false);
   const [draft, setDraft] = useState('');
@@ -26,9 +28,12 @@ export default function SerialNumberField({ label, serial, source, onChange, err
     setManual(true);
   };
 
+  const draftValue = normaliseSerial(draft);
+  const draftProblem = draftValue ? serialProblem(draftValue, rule) : null;
+
   const saveManual = () => {
-    const v = normaliseSerial(draft);
-    if (!v) return;
+    const v = draftValue;
+    if (!v || draftProblem) return;
     onChange(v, 'manual');
     setManual(false);
   };
@@ -50,25 +55,38 @@ export default function SerialNumberField({ label, serial, source, onChange, err
             autoCapitalize="characters"
             autoComplete="off"
             spellCheck={false}
+            aria-invalid={draftProblem ? true : undefined}
+            aria-describedby={draftProblem ? `${label}-manual-problem` : undefined}
             className="block min-h-14 w-full rounded-xl border border-gray-400 px-3 font-mono text-lg"
           />
+          {draftProblem && (
+            <p id={`${label}-manual-problem`} role="alert" className="text-sm font-medium text-red-700">
+              {draftProblem}
+            </p>
+          )}
           <div className="flex gap-3">
             <button type="button" onClick={() => setManual(false)} className="min-h-14 flex-1 rounded-xl border-2 border-gray-400 bg-white text-lg font-semibold">
               Cancel
             </button>
-            <button type="button" onClick={saveManual} disabled={!normaliseSerial(draft)} className="min-h-14 flex-1 rounded-xl bg-brand text-lg font-bold text-white disabled:opacity-40">
+            <button type="button" onClick={saveManual} disabled={!draftValue || !!draftProblem} className="min-h-14 flex-1 rounded-xl bg-brand text-lg font-bold text-white disabled:opacity-40">
               Save serial
             </button>
           </div>
         </div>
       ) : serial ? (
         <div className="space-y-3">
-          <p role="status" className={`text-lg font-bold ${source === 'barcode' ? 'text-green-800' : 'text-amber-800'}`}>
-            {source === 'barcode' ? '✓ BARCODE SCANNED' : '✎ ENTERED MANUALLY'}
-          </p>
+          {error ? (
+            <p role="alert" className="text-lg font-bold text-red-700">
+              ✗ NOT A SERIAL NUMBER: {error}
+            </p>
+          ) : (
+            <p role="status" className={`text-lg font-bold ${source === 'barcode' ? 'text-green-800' : 'text-amber-800'}`}>
+              {source === 'barcode' ? '✓ BARCODE SCANNED' : '✎ ENTERED MANUALLY'}
+            </p>
+          )}
           <div>
             <p className="text-sm text-gray-700">{label} Serial Number</p>
-            <p data-testid={`${label.toLowerCase()}-serial`} className="mt-1 break-all rounded-xl border border-gray-300 bg-gray-50 px-3 py-3 font-mono text-xl font-semibold">
+            <p data-testid={`${label.toLowerCase()}-serial`} className={`mt-1 break-all rounded-xl border px-3 py-3 font-mono text-xl font-semibold ${error ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-gray-50'}`}>
               {serial}
             </p>
           </div>
