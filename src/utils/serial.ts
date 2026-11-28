@@ -22,10 +22,16 @@ function serialFromLink(text: string): string | null {
   return null;
 }
 
-/** Serial = what the barcode decoded to, minus surrounding whitespace/control chars; a QR link gives its serial parameter. */
+/** A printed "SN:" / "S/N" / "Serial No." prefix some labels encode in front of the serial itself. */
+const SERIAL_PREFIX = /^(?:S\/?N|SERIAL(?:\s*(?:NO\.?|NUMBER))?)\s*[:#.]?\s+|^(?:S\/?N|SERIAL(?:\s*(?:NO\.?|NUMBER))?)\s*[:#]\s*/i;
+
+/**
+ * Serial = what the barcode decoded to, minus surrounding whitespace/control chars; a QR link gives its serial
+ * parameter; a printed "SN:" / "S/N" / "Serial No." prefix is dropped (a serial that merely starts with SN is kept).
+ */
 export function normaliseSerial(raw: string): string {
   const text = raw.replace(/[\u0000-\u001f\u007f]/g, '').trim();
-  return serialFromLink(text) ?? text;
+  return serialFromLink(text) ?? text.replace(SERIAL_PREFIX, '').trim();
 }
 
 export interface SerialRule {

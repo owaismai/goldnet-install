@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CPE_SERIAL, ROUTER_SERIAL, serialProblem } from '../src/utils/serial.ts';
+import { CPE_SERIAL, ROUTER_SERIAL, normaliseSerial, serialProblem } from '../src/utils/serial.ts';
 import { validateStep } from '../src/utils/validation.ts';
 import { emptyForm } from '../src/types.ts';
 
@@ -29,4 +29,13 @@ test('the CPE and router steps block an implausible serial', () => {
   const ok = { ...f, cpeSerial: 'rj.link/e?s=G1TD4VE00986C', routerSerial: 'ABC123456789' };
   assert.equal(validateStep('cpe', ok).cpeSerial, undefined);
   assert.equal(validateStep('router', ok).routerSerial, undefined);
+});
+
+test('normaliseSerial drops a printed SN prefix but keeps the serial itself', () => {
+  assert.equal(normaliseSerial('SN:G1UH44N009260'), 'G1UH44N009260');
+  assert.equal(normaliseSerial('S/N G1UH44N009260\n'), 'G1UH44N009260');
+  assert.equal(normaliseSerial('Serial No. G1UH44N009260'), 'G1UH44N009260');
+  assert.equal(normaliseSerial('SNOWMAN123'), 'SNOWMAN123', 'a serial that merely starts with SN is untouched');
+  assert.equal(serialProblem('SN:G1UH44N009260', CPE_SERIAL), null);
+  assert.equal(validateStep('cpe', { ...emptyForm(), cpeSerial: 'S/N G1UH44N009260', cpePhoto: true }).cpeSerial, undefined);
 });
